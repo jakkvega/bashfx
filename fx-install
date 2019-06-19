@@ -53,7 +53,7 @@
 	CPID="$$"
 	THIS_DIR="$( cd $(dirname $0)  || exit; pwd)"
 
-	FX_PREFIX="${MYBIN:-$HOME/.bin}"
+	FX_PREFIX="${MY_BIN:-$HOME/.bin}"
 
 	[ -f "$HOME/.profile" ] && BASH_PROFILE="$HOME/.profile" || BASH_PROFILE="$HOME/.bash_profile"
 	#[ ! -d "$FX_PREFIX" ] && mkdir -p "$FX_PREFIX"

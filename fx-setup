@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+##==============================================================================
+##------------------------------------------------------------------------------
+## script_id: fx-install
+## script_date: today 2019
+## script_vers: 0.0.0
+## script_desc: core utility for managing libs and scriptlets
+##------------------------------------------------------------------------------
+
+#curl -L https://git.io/fx-install | bash <-- dis what we want
+
+#-------------------------------------------------------------------------------
+# Term Junk - because I like visual queues
+#-------------------------------------------------------------------------------
+
+	red=$(tput setaf 9)
+	yellow=$(tput setaf 11)
+	orange=$(tput setaf 214)
+	green=$(tput setaf 2)
+	blue=$(tput setaf 12)
+	purple=$(tput setaf 213)
+	grey=$(tput setaf 244)
+	w=$(tput setaf 15)
+	wz=$(tput setaf 248)
+	dash="\xE2\x80\x95"
+	x=$(tput sgr0)
+	eol="$(tput el)"
+	eos="$(tput ed)"
+	cll="$(tput cuu 1 && tput el)"
+	bld="$(tput bold)"
+	rvm="$(tput rev)"
+	sp="   "
+	tab=$'\t'
+	nl=$'\n'
+	pass='\xE2\x9C\x93'
+	fail='\xE2\x9C\x97'
+	delta='\xE2\x96\xB3'
+	hook='\xE2\x94\x94'
+	dots='\xE2\x80\xA6'
+	flecha='\xC2\xBB'
+	flecha2='\xC2\xAB'
+	space='\x20'
+	diamond='\xE1\x9B\x9C'
+	delim='\x01'
+
+	bline="$(sed -n '2,2 p' $BASH_SOURCE)$nl"
+	line="$(sed -n '3,3 p' $BASH_SOURCE)$nl"
+
+#-------------------------------------------------------------------------------
+# Opts
+#-------------------------------------------------------------------------------
+
+	CPID="$$"
+	THIS_DIR="$( cd $(dirname $0)  || exit; pwd)"
+
+	FX_PREFIX="${MYBIN:-$HOME/.bin}"
+
+	[ -f "$HOME/.profile" ] && BASH_PROFILE="$HOME/.profile" || BASH_PROFILE="$HOME/.bash_profile"
+	#[ ! -d "$FX_PREFIX" ] && mkdir -p "$FX_PREFIX"
+
+#-------------------------------------------------------------------------------
+# Print Utils
+#-------------------------------------------------------------------------------
+
+	function __print(){
+		local text color prefix
+		text=${1:-}; color=${2:-grey}; prefix=${!3:-};
+		[ $opt_quiet -eq 1 ] && [ -n "$text" ] && printf "${prefix}${!color}%b${x}\n" "${text}" 1>&2 || :
+	}
+
+	function __printf(){
+		local text color prefix
+		text=${1:-}; color=${2:-grey}; prefix=${!3:-};
+		[ $opt_quiet -eq 1 ] && [ -n "$text" ] && printf "${prefix}${!color}%b${x}" "${text}" 1>&2 || :
+	}
+
+	function    info(){ local text=${1:-}; [ $opt_debug   -eq 0 ] && __print "$lambda$text" "blue"; }
+	function   silly(){ local text=${1:-}; [ $opt_silly   -eq 0 ] && __print "$dots$text" "purple"; }
+	function   trace(){ local text=${1:-}; [ $opt_verbose -eq 0 ] && __print "$text"   "grey2"; }
+	function  ftrace(){ local text=${1:-}; [ $opt_verbose -eq 0 ] && __print " $text"   "fail"; }
+	function  ptrace(){ local text=${1:-}; [ $opt_verbose -eq 0 ] && __print " $text$x" "pass"; }
+	function  wtrace(){ local text=${1:-}; [ $opt_verbose -eq 0 ] && __print " $text$x" "delta"; }
+	function  dtrace(){ local text=${1:-}; [ $opt_dev_mode -eq 0 ] && __print "##[ $text ]##" "purple"; }
+	function   error(){ local text=${1:-}; __print " $text" "fail"; }
+	function    warn(){ local text=${1:-}; __print " $text$x" "delta" "orange"; }
+	function    pass(){ local text=${1:-}; __print " $text$x" "green" "pass"; }
+	function success(){ local text=${1:-}; __print "\n$pass $1 [$2] \n$bline\n\n\n"; }
+	function   fatal(){ trap - EXIT; __print "\n$fail $1 [$2] \n$bline\n\n\n"; exit 1; }
+
+#-------------------------------------------------------------------------------
+# Utils
+#-------------------------------------------------------------------------------
+
+	function fx_confirm(){
+		local ret;ret=1;
+		__printf "${1}? > " "white" #:-Are you sure ?
+		while read -r -n 1 -s answer; do
+			if [[ $answer = [YyNn10tf+\-q] ]]; then
+				[[ $answer = [Yyt1+] ]] && __printf "${bld}${green}yes${x}" && ret=0 || :
+				[[ $answer = [Nnf0\-] ]] && __printf "${bld}${red}no${x}" && ret=1 || :
+				[[ $answer = [q] ]] && __printf "\n" && exit 1 || :
+				break
+			fi
+		done
+		__printf "\n"
+		return $ret
+	}
+
+	function fx_exists(){
+		command -v "$1" &> /dev/null;
+	}
+
+
+#-------------------------------------------------------------------------------
+# SED Utils
+#-------------------------------------------------------------------------------
+
+	function file_marker(){
+		local delim dst dend mode="$1" lbl="$2" as="$3"
+		dst=dend='#';
+		[ "$as" = "js" ] && dst='\/\*'; dend='\*\/' || :
+		[ "$mode" = "str" ] && str='str' || str='end'
+		echo "${dst}----${block_lbl}:${str}----${dend}"
+	}
+
+	function file_add_block(){
+		local newval="$1" src="$2" block_lbl="$3" delim="$4" match_st match_end data res ret=1
+		match_st=$(file_marker "str" "${block_lbl}" "${delim}" )
+		match_end=$(file_marker "end" "${block_lbl}" "${delim}" )
+		res=$(file_find_block "$src" "$block_lbl" "${delim}" )
+		ret=$?
+		if [ $ret -gt 0 ]; then #nomatch
+			data="$(cat <<-EOF
+				${match_st}
+				${newval}
+				${match_end}
+			EOF
+			)";
+			echo "$data" >> $src
+			ret=$?
+		fi
+		return $ret
+	}
+
+	function file_del_block(){
+		local src="$1" block_lbl="$2" delim="$3" match_st match_end data res ret dst dend
+		match_st=$(file_marker "str" "${block_lbl}" "${delim}" )
+		match_end=$(file_marker "end" "${block_lbl}" "${delim}" )
+		sed -i.bak "/${match_st}/,/${match_end}/d" "$src";ret=$?
+		res=$(file_find_block "$src" "$block_lbl" "${delim}" );ret=$?
+		[ $ret -gt 0 ] && ret=0 || ret=1
+		rm -f "${src}.bak"
+		return $ret
+	}
+
+	function file_find_block(){
+		local src="$1" block_lbl="$2" delim="$3" match_st match_end data res ret=1
+		match_st=$(file_marker "str" "${block_lbl}" "${delim}")
+		match_end=$(file_marker "end" "${block_lbl}" "${delim}")
+		res=$(sed -n "/${match_st}/,/${match_end}/p" "$src")
+		[ -z "$res" ] && ret=1 || ret=0;
+		echo "$res"
+		return $ret;
+	}
+
+	function profile_link(){
+		local rc_file="$1" ret res data
+		[ ! -f "$rc_file" ] && lux_make_rc || :
+		if [ -f "$rc_file" ]; then
+			src="$BASH_PROFILE" #link to bashrc so vars are available to subshells?
+			[ ! -f "$src" ] && touch "$src"
+			lbl="$script_id"
+			res=$(file_find_block "$src" "$lbl" ); ret=$?
+			if [ $ret -eq 1 ]; then
+				data="$(cat <<-EOF
+					${tab} if [ -f "$rc_file" ] ; then
+					${tab}   source "$rc_file"
+					${tab} else
+					${tab}   [ -t 1 ] && echo "\$(tput setaf 214).fxrc is missing, fx link or unlink to fix ${x}" ||:
+					${tab} fi
+				EOF
+				)";
+				res=$(file_add_block "$data" "$src" "$lbl" )
+				ret=$?
+			fi
+		else
+			error "Profile doesnt exist @ $BASH_PROFILE"
+		fi
+	}
+
+	function profile_unlink(){
+		local rc_file="$1" src="$BASH_RC" lbl="$LUX_ID" ret res data
+		[ -f "$rc_file" ] && rm -f "$rc_file" || :
+		res=$(file_del_block "$src" "$lbl" ); ret=$?
+		[ $ret -eq 0 ] && __print ".fxrc removed from $rc_file" "red" ||:
+	}
+
+
+#-------------------------------------------------------------------------------
+# Main
+#-------------------------------------------------------------------------------
+
+echo $FX_PREFIX
+
+

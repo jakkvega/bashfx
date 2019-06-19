@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-##------------------------------------------------------------------------------
-## script_id: fx-install
-## script_date: today 2019
-## script_vers: 0.0.0
-## script_desc: core utility for managing libs and scriptlets
-##------------------------------------------------------------------------------
-
-#curl -L https://git.io/fx-install | bash <-- dis what we want

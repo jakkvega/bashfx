@@ -1,0 +1,267 @@
+#!/usr/bin/env bash
+##------------------------------------------------------------------------------
+## name: fx-pkg
+## autobuild: 00007
+## author: qodeninja
+## updated: Wed 2019-07-31 10:40 PM
+##------------------------------------------------------------------------------
+
+
+
+#-------------------------------------------------------------------------------
+# Term
+#-------------------------------------------------------------------------------
+
+	red=$(tput setaf 1)
+	green=$(tput setaf 2)
+	blue=$(tput setaf 12)
+	orange=$(tput setaf 214)
+	white=$(tput setaf 248)
+	white2=$(tput setaf 15)
+	x=$(tput sgr0)
+	eol="$(tput el)"
+	bld="$(tput bold)"
+	tab=$'\t'
+	nl=$'\n'
+	line="##---------------$nl"
+	delta="${orange}\xE2\x96\xB3"
+	pass="${green}\xE2\x9C\x93"
+	fail="${red}\xE2\x9C\x97"
+	lambda="\xCE\xBB"
+
+	opt_debug=1
+	opt_quiet=1
+
+#-------------------------------------------------------------------------------
+# Utils
+#-------------------------------------------------------------------------------
+
+	function command_exists() {
+		type "$1" &> /dev/null ;
+	}
+
+
+
+	function __e(){
+		printf "${blue}${@}${x}\n" 1>&2;
+	}
+
+	function __printf(){
+		local text color prefix
+		text=${1:-}; color=${2:-white2}; prefix=${!3:-};
+		[ $opt_quiet -eq 1 ] && [ -n "$text" ] && printf "${prefix}${!color}%b${x}" "${text}" 1>&2 || :
+	}
+
+	function confirm(){
+		local ret;ret=1
+		__printf "${1}? > " "white2" #:-Are you sure ?
+		[ $opt_yes -eq 0 ] && __printf "${bld}${green}auto yes${x}\n" && return 0;
+		[[ -f ${BASH_SOURCE} ]] && src='/dev/stdin' || src='/dev/tty'
+		while read -r -n 1 -s answer < $src; do
+			[ $? -eq 1 ] && exit 1;
+			if [[ $answer = [YyNn10tf+\-q] ]]; then
+				[[ $answer = [Yyt1+] ]] && __printf "${bld}${green}yes${x}" && ret=0 || :
+				[[ $answer = [Nnf0\-] ]] && __printf "${bld}${red}no${x}" && ret=1 || :
+				[[ $answer = [q] ]] && __printf "\n" && exit 1 || :
+				break
+			fi
+		done
+		__printf "\n"
+		return $ret
+	}
+
+	function __sleep(){
+		[ $opt_yes -eq 1 ] && sleep 1 || :
+	}
+
+	function error(){ local text=${1:-}; __printf " $text\n" "fail"; }
+	function warn(){ local text=${1:-}; __printf " $text$x\n" "delta";  }
+	function info(){ local text=${1:-}; [ $opt_debug -eq 0 ] && __printf "$lambda $text\n" "blue"; }
+	function die(){ __printf "\n$fail $1 "; exit 1; }
+
+
+	function __popout(){
+		local key=$1; shift;
+		local arr=("${@}") new_array=()
+		for i in "${arr[@]}"; do
+		   [[ $i != "$key" ]] && new_array+=($i)
+		done
+		arr=("${new_array[@]}")
+		unset new_array
+		echo "${arr[@]}";
+	}
+
+	function pop_flag(){
+		local key=$1 flag="--$key" ret=1; shift; local arr=("${@}");
+		if [[ "${arr[@]}" =~ "$flag"  ]]; then
+			 arr=($(__popout "$flag" "${@}"));
+			 ret=0;
+		fi
+		echo "${arr[@]}";
+		return $ret;
+	}
+
+#-------------------------------------------------------------------------------
+# Utils
+#-------------------------------------------------------------------------------
+
+	function fx_meta_set(){
+		local key="$1" data="$2" target="$3" prev next
+		info "meta [$1] [$2] [$3]"
+		prev="^[#\/\* \-\!\< ]*${key}[\w]*:[\w]*[^\n]*"
+		next="## ${key}: $data"
+
+		__e "$key $data $target"
+
+		if grep -E "^##[ ]*${key}[ ]*:[ ]*" "$target"; then
+			sed -i.bak "s|${prev}|${next}|" "$target" #&& rm ${target}.bak
+		else
+			info "meta key $key not found";
+			if grep  "##name" "$target"; then
+				info "$next"
+				#sed -i.bak "/^##name=.*/a \"${next}\"" "$target"
+				sed -i.bak -e '/^##name=.*/a\' -e "${next}" "$target"
+				#sed -e '/CLIENTSCRIPT=/a\' -e 'CLIENTSCRIPT2="hello"' file
+			else
+				die "Cant find primary meta key [name]!"
+			fi
+		fi
+		##sed '/^anothervalue=.*/a after=me' test.txt
+		return $?
+	}
+
+
+	function fx_meta_get(){
+		local target="$1" key="$2"
+		local string=$(grep "^[#\/\* \-\!\<]*$key:" $target | cut "-d:" -f2-) #works
+		echo $string
+	}
+
+
+	function meta_autobuild(){
+		local target="$1"
+		local autobuild=$(fx_meta_get "$target" "autobuild")
+		printf -v autobuild '%05d' "$autobuild" 2>/dev/null
+		echo "$autobuild"
+
+		local bump="$((${autobuild[0]} + 1))"
+		printf -v bump '%05d' "$bump" 2>/dev/null
+		echo "$bump"
+		fx_meta_set "autobuild" "$bump" "$target"; ret=$?
+		meta_date "$target"
+
+		return $ret;
+	}
+
+	function meta_date(){
+		local timestamp=$(date "+%a %F %I:%M %p") prev next key data
+		target="$1"
+		fx_meta_set "updated" "$timestamp" "$target"; ret=$?
+
+	}
+
+	function meta_bump(){
+		local data=$1
+		target="$BASH_SOURCE"
+		fx_meta_set "version" "$data" "$target"; ret=$?
+		meta_date
+	}
+
+
+	function fx_retag(){
+		local tagname=${1:-stable}
+		if command_exists "git"; then
+			if [ -d ./.git ]; then
+				if git show-ref --tags | egrep -q "refs/tags/$tagname$"; then
+
+					#remove existing tag
+					git tag -d $tagname
+					git push origin :refs/tags/$tagname
+
+				else
+					echo "$tagname not found"
+				fi
+
+				#retag
+				git tag -a $tagname -m "auto retagging $tagname"
+				git push origin --tags
+
+			else
+				echo "cannot retag $tagname, invalid git repo"
+			fi
+		else
+			error "Cant find local git command!"
+		fi
+	}
+
+#-------------------------------------------------------------------------------
+# FX API
+#-------------------------------------------------------------------------------
+
+	function api_options(){
+		local arr=("${@}")
+
+		__e  "${arr[@]}"
+
+		opt_debug=1
+		opt_quiet=1
+		#[[ "${arr[@]}" =~ "--quiet"  ]] && { opt_quiet=0; arr=(__popout "--quiet" "${@}") || :
+		#[[ "${arr[@]}" =~ "--debug"  ]] && opt_debug=0 || :
+		arr=($(pop_flag "quiet" "${arr[@]}"))
+		arr=($(pop_flag "debug" "${arr[@]}"))
+		echo "${arr[@]}";
+	}
+
+
+
+#-------------------------------------------------------------------------------
+# FX Main
+#-------------------------------------------------------------------------------
+	function dispatch(){
+    local call target ret;
+    call=$1; shift
+    info "$1 $2 $3 $4"
+		case $call in
+				vers*)     fx_version "$1"; ret=$?;;
+				retag)     fx_retag "$1"; ret=$?;;
+				meta*)     fx_meta_set "$1" "$2" "$3"; ret=$?;;
+				auto*)     meta_autobuild "$1"; ret=$?;;
+				help)			 echo 'help not implemented'; ;;
+			*)
+				if [ ! -z "$call" ]; then
+					die "Invalid command $call";
+					ret 1;
+				fi
+			;;
+		esac
+		return $ret
+	}
+
+
+	function main(){
+		local args=("${@}")
+		dispatch "${args[@]}";ret=$?
+		return $ret
+	}
+
+#-------------------------------------------------------------------------------
+# FX Driver
+#-------------------------------------------------------------------------------
+
+
+	if [ "$0" = "-bash" ]; then
+		:
+	else
+		__e "hello"
+		orig_args=("${@}")
+		#echo  "${orig_args[@]}"
+		args=($(api_options "${orig_args[@]}"))
+		#args=( "${orig_args[@]/\-*}" ); #delete anything that looks like an option
+		main "${args[@]}";ret=$?
+		echo  "${args[@]}"
+	fi
+
+
+
+
+

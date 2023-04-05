@@ -1,0 +1,668 @@
+#!/usr/bin/env bash
+#-------------------------------------------------------------------------------
+#$ name:my
+#$ author:qodeninja
+#$ autobuild: 00001
+#$ date:
+#-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# Meta
+#-------------------------------------------------------------------------------
+
+	readonly script_pid=$$
+	readonly script_author="qodeninja"
+	readonly script_id="bashfx"
+	readonly script_prefix="FX"
+	readonly script_rc_file=".fxrc"
+	readonly script_log_file="$script_id.log"
+
+
+#-------------------------------------------------------------------------------
+# Config
+#-------------------------------------------------------------------------------
+
+	THIS_DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" || exit; pwd -P)"
+	ROOT_DIR="$( cd "$THIS_DIR" && cd .. || exit; pwd -P)"
+
+
+	THIS_PATH_USER="/usr/local/my"
+	THIS_PATH_HOME="$HOME/.my"
+
+#-------------------------------------------------------------------------------
+# Term
+#-------------------------------------------------------------------------------
+
+	red=$(tput setaf 1)
+	green=$(tput setaf 2)
+	blue=$(tput setaf 12)
+	cyan=$(tput setaf 14)
+	orange=$(tput setaf 214)
+	purple=$(tput setaf 213)
+	white=$(tput setaf 248)
+	white2=$(tput setaf 15)
+	grey=$(tput setaf 244)
+
+	x=$(tput sgr0)
+	eol="$(tput el)"
+	bld="$(tput bold)"
+	line="##---------------$nl"
+	tab=$'\t'
+	nl=$'\n'
+
+	delta="${orange}\xE2\x96\xB3"
+	pass="${green}\xE2\x9C\x93"
+	fail="${red}\xE2\x9C\x97"
+	star="\xE2\x98\x85"
+	lambda="\xCE\xBB"
+	idots="\xE2\x80\xA6"
+
+#-------------------------------------------------------------------------------
+# Utils
+#-------------------------------------------------------------------------------
+
+	__printf(){
+		local text color prefix
+		text=${1:-}; color=${2:-white2}; prefix=${!3:-};
+		[ $opt_quiet -eq 1 ] && [ -n "$text" ] && printf "${prefix}${!color}%b${x}" "${text}" 1>&2 || :
+	}
+
+	confirm(){
+		local ret;ret=1
+		__printf "${1}? > " "white2" #:-Are you sure ?
+		[ $opt_yes -eq 0 ] && __printf "${bld}${green}auto yes${x}\n" && return 0;
+		[[ -f ${BASH_SOURCE} ]] && src='/dev/stdin' || src='/dev/tty'
+
+		while read -r -n 1 -s answer < $src; do
+			[ $? -eq 1 ] && exit 1;
+			if [[ $answer = [YyNn10tf+\-q] ]]; then
+				[[ $answer = [Yyt1+] ]] && __printf "${bld}${green}yes${x}" && ret=0 || :
+				[[ $answer = [Nnf0\-] ]] && __printf "${bld}${red}no${x}" && ret=1 || :
+				[[ $answer = [q] ]] && __printf "\n" && exit 1 || :
+				break
+			fi
+		done
+		__printf "\n"
+		return $ret
+	}
+
+	__sleep(){
+		[ $opt_yes -eq 1 ] && sleep 0.5 || :
+	}
+
+
+	error(){ local text=${1:-}; __printf " $text\n" "fail"; }
+	warn(){ local text=${1:-}; [ $opt_quiet -eq 1 ] &&__printf " $text$x\n" "delta"; }
+	okay(){ local text=${1:-}; [ $opt_quiet -eq 1 ] &&__printf " $text$x\n" "pass"; }
+
+	info(){ local text=${1:-}; [ $opt_debug -eq 0 ] && __printf "$lambda $text\n" "blue"; }
+	trace(){ local text=${1:-}; [ $opt_debug -eq 0 ] && __printf "$idots $text\n" "grey"; }
+	die(){ __printf "\n$fail $1 "; exit 1; }
+
+
+	# tput sed printf
+
+#-------------------------------------------------------------------------------
+# SED Utils
+#-------------------------------------------------------------------------------
+	
+	#sed block parses self to find meta data
+	sed_block(){
+		local id="$1" pre="^[#]+[=]+" post=".*" str end;
+		str="${pre}${id}[:]?[^\!=\-]*\!${post}";
+		end="${pre}\!${id}[:]?[^\!=\-]*${post}";
+		sed -rn "1,/${str}/d;/${end}/q;p" $BASH_SOURCE | tr -d '#'; 
+	}
+
+	#prints content between sed block
+	block_print(){
+		local o=$orange;b=$cyan;g=$green;r=$red;w=$white; #shortcut colors
+		local lbl="$1" IFS res;
+		res=$(sed_block $lbl);
+		if [ ${#res} -gt 0 ]; then
+			while IFS= read -r line; do
+				[[ $lbl =~ doc*|inf* ]] && line=$(eval "printf '%b' \"$line\"");
+				echo "$line"
+			done  <<< "$res";
+		else
+			return 1;
+		fi
+	}
+
+
+
+	#create a block label using comments
+	file_marker(){
+		local delim dst dend mode="$1" lbl="$2" as="$3"
+		dst='#';dend='#';
+		[ "$as" = "js" ] && { dst='\/\*'; dend='\*\/'; }|| :
+		[ "$mode" = "str" ] && str='str' || str='end'
+		echo "${dst}----${block_lbl}:${str}----${dend}"
+	}
+
+	#add a block of text wrapped by a block label
+	file_add_block(){
+		local newval="$1" src="$2" block_lbl="$3" delim="$4" match_st match_end data res ret=1
+		match_st=$(file_marker "str" "${block_lbl}" "${delim}" )
+		match_end=$(file_marker "end" "${block_lbl}" "${delim}" )
+		res=$(file_find_block "$src" "$block_lbl" "${delim}" )
+		ret=$?
+		if [ $ret -gt 0 ]; then #nomatch ret=1
+			data="$(cat <<-EOF
+				${match_st}
+				${newval}
+				${match_end}
+			EOF
+			)";
+			echo "$data" >> $src
+			ret=$?
+		else
+			ret=1
+		fi
+		return $ret
+	}
+
+	#delete everything within in a block including label
+	file_del_block(){
+		local src="$1" block_lbl="$2" delim="$3" match_st match_end data res ret dst dend
+		match_st=$(file_marker "str" "${block_lbl}" "${delim}" )
+		match_end=$(file_marker "end" "${block_lbl}" "${delim}" )
+		#fix clobber
+		sed -i.bak "/${match_st}/,/${match_end}/d" "$src";ret=$?
+		#sed "/${match_st}/,/${match_end}/d" "$src" < "${src}.bak" > "$src" ;ret=$?
+		res=$(file_find_block "$src" "$block_lbl" "${delim}" );ret=$?
+		[ $ret -gt 0 ] && ret=0 || ret=1
+		rm -f "${src}.bak"
+		return $ret
+	}
+
+	#find a block by its label
+	file_find_block(){
+		local src="$1" block_lbl="$2" delim="$3" match_st match_end data res err ret=1
+		err="cannot find block ($2)"
+		match_st=$(file_marker "str" "${block_lbl}" "${delim}")
+		match_end=$(file_marker "end" "${block_lbl}" "${delim}")
+		res=$(sed -n "/${match_st}/,/${match_end}/p" "$src")
+		[ -z "$res" ] && ret=1;
+		[ -n "$res" ] && err= && ret=0;
+		echo "$res"
+		return $ret;
+	}
+
+
+
+
+	file_dump(){
+		local src="$1" force="$2"
+		[ $opt_quiet -eq 0 ] && return 0;
+		if [ -f "$src" ]; then
+			echo $line${nl}${nl}
+			cat "$src"
+			echo $line${nl}${nl}
+		else
+			die "File doesnt exist. ($src)"
+		fi
+	}
+
+	debug_opts(){
+		local this vars=($(set | grep -E ^opt_[^=]+=.* | cut -d "=" -f1))
+		for this in "${vars[@]}"; do
+			printf "$this = ${!this} $nl"
+		done		
+	}
+
+	debug_vars(){
+		fx_vars;
+		local this vars=($(set | grep -E ^FX_[^=]+=.* | cut -d "=" -f1))
+		for this in "${vars[@]}"; do
+			printf "$this = ${!this} $nl"
+		done	
+	}
+
+#-------------------------------------------------------------------------------
+# FX UTIL
+#-------------------------------------------------------------------------------
+
+	create_dirs(){
+		local prefix="$FX_PREFIX" rel_dirs this
+		rel_dirs=("lib/bashfx" "etc/bashfx" bin priv data);
+		for this in "${rel_dirs[@]}"; do
+			this="${prefix}/${this}"
+			[ ! -d $this ] && { info "Creating Directory $this..."; mkdir -p $this; } || warn "Directory $this already exists";
+			[ ! -w $this ] && die "Install directory [$this] is not writeable. Exiting." || :;
+		done
+	}
+
+	#	FX_DIRS=($FX_LIB $FX_BIN $FX_ETC $FX_PRIV $FX_DATA);	
+
+	nuke_dirs(){
+			local prefix="$FX_PREFIX" this rel_dirs
+			trace "Nuking Directories..."
+			rel_dirs=("lib/bashfx" "etc/bashfx" bin priv data);
+			for this in "${rel_dirs[@]}"; do
+				[ ! -d $this ] && warn "$this does not exist"
+				[ -d $this ] && { if confirm "Force remove ${this} dir? (y/n)"; then rm -rf $this; fi } || :
+				[ -d $this ] && die "Unable to remove directory [$this] please check permissions." || :
+			done
+	}
+
+#-------------------------------------------------------------------------------
+# RC File
+#-------------------------------------------------------------------------------
+	has_rc_file(){
+		[ -f "$FX_CONF_FILE" ] && return 0;
+		return 1
+	}
+
+
+	rc_file_str(){
+		trace "generate rcfile string..."
+		local data
+		data+=""
+		data="$(cat <<-EOF
+			#!/usr/bin/bash
+			${line}
+			### bashfx install generated config file $(date)
+				export FX_INSTALLED=0
+				export FX_PREFIX="$FX_PREFIX"
+				export FX_BIN="$FX_BIN"
+				if [[ ! "\$PATH" =~ "\$FX_BIN" ]]; then
+					export PATH=\$PATH:\$FX_BIN;
+				fi
+			${line}
+		EOF
+		)";
+		echo "$data"
+	}
+
+
+	rc_make(){
+		local src="$FX_CONF_FILE" rc_str
+		trace "make rc file..."
+
+		has_rc_file && { warn "RC File already exists."; return 0 }
+
+		if ! has_rc_file; then
+			if [ -d "$FX_ETC" ]; then
+				rc_str="$(rc_file_str)"
+				echo -e "$rc_str" > ${src}
+				[ -f "${src}" ] && okay "RC File created. ($rc_str)" || :
+				return 0 
+			else
+				warn "$FX_ETC is missing!"
+			fi
+		fi
+
+		err="Cannot make rc file!"
+		return 1;
+	}
+
+
+	rc_load(){
+		local list len 
+		trace "find rcfile and load..."
+		list=($(find "$THIS_PATH_HOME" "$THIS_PATH_USER" -type f -name "$FX_CONF_NAME" 2>/dev/null))
+		len=${#list[@]}
+
+		if [ $len -gt 0 ]; then
+			source "${list[0]}"
+			[ $FX_INSTALLED -eq 0 ] && fx_vars || :;
+			return 0
+		else
+			warn "Could not find local $FX_CONF_NAME"
+			return 1
+		fi
+
+	}
+
+
+	rc_nuke(){
+		[ -f "$FX_CONF_FILE" ] && rm "$FX_CONF_FILE" || :;
+		[ -f "$FX_CONF_FILE" ] && die "Unable to delete conf file for cleanup" || :;
+		#[ $force -eq 0 ] && fx_unset 0 || fx_unset
+	}
+
+
+
+#-------------------------------------------------------------------------------
+# Profile Linker
+#-------------------------------------------------------------------------------
+	has_link(){
+		local res ret=1 src="$FX_BASH_PROFILE"
+		res=$(file_find_block "$src" "$script_id" ); ret=$?;
+		return $ret;
+	}
+
+
+	profile_str(){
+		trace "generate profile string..."
+		local data rc_file="$1"
+		data+=""
+		data="$(cat <<-EOF
+			${tab} if [ -f "$rc_file" ] ; then
+			${tab}   source "$rc_file"
+			${tab} else
+			${tab}   [ -t 1 ] && { echo "\$(tput setaf 214) $rc_file is missing, fx repair to fix ${x}";FX_INSTALLED=1; } || :
+			${tab} fi
+		EOF
+		)";
+		echo "$data"
+	}
+
+
+	profile_link(){
+		trace "Linking profile..."
+		local rc_file="$1" src ret res data
+		if [ -f "$rc_file" ]; then
+
+			src="$FX_BASH_PROFILE" #link to bashrc so vars are available to subshells?
+
+			[ ! -f "$src" ] && touch "$src"
+
+			if ! has_link; then
+				data="$(profile_str $rc_file)";
+				res=$(file_add_block "$data" "$src" "$script_id" )
+				ret=$?
+				okay "Profile linked."
+			else
+				warn "Profile already linked.";ret=0;
+			fi
+
+		else
+			err="RCFILE doesnt exist @ $rc_file, cannot link!"
+			ret=1
+		fi
+
+		return $ret
+	}
+
+
+	profile_unlink(){
+		local rc_file="$1" src="$FX_BASH_PROFILE" ret=1 
+		if has_link; then
+			res=$(file_del_block "$src" "$script_id" ); ret=$?
+			[ $ret -eq 0 ] && okay "Profile unlinked." || :;
+		else
+			warn "Already unlinked."
+		fi
+		return $ret;
+	}
+
+
+#-------------------------------------------------------------------------------
+# FX API
+#-------------------------------------------------------------------------------
+	
+	fx_vars(){
+		if [ -n $FX_PREFIX ]; then
+			trace "setting vars..."
+			FX_LIB="$FX_PREFIX/lib/bashfx"
+			FX_BIN="$FX_PREFIX/bin/bashfx"
+			FX_ETC="$FX_PREFIX/etc/bashfx"
+			FX_PRIV="$FX_PREFIX/priv"
+			FX_DATA="$FX_PREFIX/data"
+			FX_CONF_NAME="fx.rc"
+			FX_CONF_FILE="$FX_ETC/$FX_CONF_NAME"
+
+			#find link
+			#res=$(file_find_block "$FX_BASH_PROFILE" "$script_id" );ret=$?;
+			#islinked=$ret;
+
+			#find rcfile
+			[ -f "$FX_CONF_FILE" ] && hasRCfile=0 || hasRCfile=1;
+
+			return 0
+		fi
+		trace "vars not set..."
+		return 1
+	}
+
+
+	fx_unset(){
+		local vars 
+		trace "Unsetting Vars..."
+		if [ -n "$1" -o $opt_yes -eq 0 ] || confirm "Unset all BASHFX variables for the current shell? (y/n)"; then
+			vars=($(set | grep -E ^FX_[^=]+=.* | cut -d "=" -f1))
+			for v in "${vars[@]}"; do
+				warn "removing ${v}"
+				unset "$v" 2> /dev/null
+			done
+			unset vars 2> /dev/null
+		fi
+	}
+
+
+	fx_prefix(){
+		trace "getting prefix..."
+		#option flag set
+		if [ -z "$FX_PREFIX" -a $opt_system -eq 0 ]; then
+			FX_PREFIX="$THIS_PATH_USER"
+		fi
+
+		#prompt user if param passed
+		if [ -n "$1" ]; then
+
+			if [ -z "$FX_PREFIX" ]; then
+				if confirm "Set default FX_PREFIX to [$THIS_PATH_HOME] (y/n=custom)?"; then
+					FX_PREFIX="$THIS_PATH_HOME"
+				else
+					FX_PREFIX="$THIS_PATH_USER"
+				fi
+			fi
+
+		else
+			#default
+			FX_PREFIX="$THIS_PATH_HOME"
+		fi
+
+		info "FX_PREFIX set to [$FX_PREFIX]"
+	}
+
+
+
+	fx_show_file(){
+		trace "dumping file..."
+		local call="$1" arg="$2" cmd= ret=0;
+		case $call in
+			rc*)   file_dump "$FX_CONF_FILE";; 
+			prof*) file_dump "$FX_BASH_PROFILE";;
+			*)
+				err="Invalid file => $call";
+				ret=1;
+			;;
+		esac
+		[ -n "$err" ] && error "$err";
+		return $ret;
+
+	}
+
+
+	fx_link(){
+		if [ -f "$FX_CONF_FILE" ]; then
+			profile_link "$FX_CONF_FILE"
+		else
+			err="Cannot link rcfile ($FX_CONF_FILE)"
+		fi
+	}
+
+
+	fx_unlink(){
+		trace "unlinking..."
+		profile_unlink $FX_CONF_FILE;
+	}
+
+
+#-------------------------------------------------------------------------------
+# FX Main
+#-------------------------------------------------------------------------------
+ 
+	#print usage message
+	usage(){
+		block_print 'doc:help'; 
+	}
+
+	#parse options
+	options(){
+		
+		FX_INSTALLED=1
+		FX_CONF_NAME="fx.rc"
+
+		opt_dump=1
+		opt_debug=1
+		opt_quiet=1
+		opt_yes=1
+		opt_system=1
+		opt_nuke=1
+
+		for arg in "${@}"; do
+			case "$arg" in
+				--quiet)
+					opt_quiet=0
+					opt_yes=0
+					;;
+				--debug)
+					opt_debug=0
+					;;
+				--dump)
+					opt_dump=0
+					;;
+				--system)
+					opt_system=0
+					;;
+				--nuke)
+					opt_nuke=0
+					;;
+				--yes)
+					opt_yes=0
+					;;
+			esac
+		done
+
+		rc_load;
+		fx_prefix;
+		fx_vars;
+
+		FX_BASH_PROFILE="${HOME}/.profile"
+		[ -f "$FX_BASH_PROFILE" ] || FX_BASH_PROFILE="$HOME/.bash_profile";
+
+	}
+
+	status(){
+		debug_opts
+		debug_vars
+	}
+
+#-------------------------------------------------------------------------------
+# FX API
+#-------------------------------------------------------------------------------
+	
+
+	api_install(){
+		create_dirs
+		rc_make
+		fx_link
+	}
+
+	api_uninstall(){
+		:
+	}
+	
+	api_repair(){
+		:
+		#has prefix
+
+		#vars ready
+		#directories
+		#rc file
+		#profile
+		#profile link
+	}
+
+#-------------------------------------------------------------------------------
+# FX Main
+#-------------------------------------------------------------------------------
+ 
+	dispatch(){
+
+		local call="$1" arg="$2" cmd= ret;
+		case $call in
+			help) 	 cmd="usage";; #doesnt work on mac
+			stat*)   cmd="status";;
+			inst*)   cmd="api_install";;
+			vars*)   cmd="fx_vars";;
+			rc*)		 cmd="rc_make";;	
+			rmrc*)	 cmd="rc_nuke";;
+			link*)   cmd="fx_link";;
+			unli*)	 cmd="fx_unlink";;
+			show*)   cmd="fx_show_file";;
+			#unin*)   cmd="api_uninstall";;
+			#dl)		   cmd="api_download";;
+			*)
+				if [ ! -z "$call" ]; then
+					err="Invalid command => $call";
+				fi
+			;;
+		esac
+
+		trace "dispatch: $cmd ($arg)"
+
+		$cmd "$arg";ret=$?;
+		[ -n "$err" ] && error "$err";
+		return $ret;
+	}
+
+
+	main(){
+		local args=("${@}")
+		dispatch "${args[@]}";ret=$?
+		[ $opt_dump -eq 0 ] && status || :;
+		return $ret
+	}
+
+#-------------------------------------------------------------------------------
+# FX Driver
+#-------------------------------------------------------------------------------
+
+
+	if [ "$0" = "-bash" ]; then
+		:
+	else
+		orig_args=("${@}")
+		options "${orig_args[@]}";
+		args=( "${orig_args[@]/\-*}" ); #delete anything that looks like an option
+		main "${args[@]}";ret=$?
+	fi
+
+
+
+
+#-------------------------------------------------------------------------------
+#=====================================!code=====================================
+#====================================doc:help!==================================
+#
+#  \n\t${b}fx-setup --option [<n>ame] [<p>ath]${x}
+#
+#  \t${o}home: $FX_PREFIX${x}
+#  \t${o}linked: $FX_BASH_PROFILE${x}
+#  \t${o}rcfile($hasRCfile): $FX_CONF_FILE ${x}
+#  \t${w}Commands:${x}
+#
+#  \t${b}help stat
+#  \t${b}rc rmrc
+#  \t${b}link unlink
+#  \t${b}vars
+#
+#  \t${o}--quiet
+#  \t${o}--debug
+#  \t${o}--system
+#  \t${o}--local
+#  \t${o}--nuke
+#  \t${o}--clean  : 
+#  \t${o}--yes    : respond yes to all prompts
+#
+#=================================!doc:help=====================================
+
+
+
+
+

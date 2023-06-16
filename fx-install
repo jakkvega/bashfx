@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+#===============================================================================
+#
+#  ________  ________  ________  ___  ___  ________ ___    ___ 
+# |\   __  \|\   __  \|\   ____\|\  \|\  \|\  _____|\  \  /  /|
+# \ \  \|\ /\ \  \|\  \ \  \___|\ \  \\\  \ \  \__/\ \  \/  / /
+#  \ \   __  \ \   __  \ \_____  \ \   __  \ \   __\\ \    / / 
+#   \ \  \|\  \ \  \ \  \|____|\  \ \  \ \  \ \  \_| /     \/  
+#    \ \_______\ \__\ \__\____\_\  \ \__\ \__\ \__\ /  /\   \  
+#     \|_______|\|__|\|__|\_________\|__|\|__|\|__|/__/ /\ __\ 
+#                        \|_________|              |__|/ \|__| 
+#                                                             
+#-------------------------------------------------------------------------------
+#$ name:bashfx-install
+#$ author:qodeninja
+#$ autobuild: 00001
+#$ date:
+#-------------------------------------------------------------------------------
+
+
+#=====================================code!=====================================
+
+#-------------------------------------------------------------------------------
+# CHECK FOR BASIC DEPENDENCIES
+#-------------------------------------------------------------------------------
+
+		opt_debug=1
+		opt_quiet=1
+		opt_yes=1
+		opt_local=1
+		opt_nuke=1
+		opt_clean=1
+
+	_DEPS_LOCAL=(tput printf sed git sleep);
+	_DEPS_MISSING=();
+
+	function command_exists(){
+		type "$1" &> /dev/null ;
+	}
+
+	function check_deps(){
+		for dep in "${@}"; do
+			if ! command_exists "$dep"; then
+				_DEPS_MISSING+=("$dep")
+				fatal "no $dep"
+			fi
+		done
+		[ ${#_DEPS_MISSING[@]} -gt 1 ] && return 1;
+		return 0;
+	}
+
+
+
+#-------------------------------------------------------------------------------
+# Term
+#-------------------------------------------------------------------------------
+
+	red=$(tput setaf 9)
+	green=$(tput setaf 2)
+	blue=$(tput setaf 12)
+	orange=$(tput setaf 214)
+	white=$(tput setaf 248)
+	white2=$(tput setaf 15)
+	x=$(tput sgr0)
+	eol="$(tput el)"
+	bld="$(tput bold)"
+	tab=$'\t'
+	nl=$'\n'
+	delta="${orange}\xE2\x96\xB3"
+	pass="${green}\xE2\x9C\x93"
+	fail="${red}\xE2\x9C\x97"
+	lambda="\xCE\xBB"
+	line="##---------------$nl"
+	bline="$(sed -n '2,2 p' $BASH_SOURCE)$nl"
+	line="$(sed -n '3,3 p' $BASH_SOURCE)$nl"
+
+
+
+#-------------------------------------------------------------------------------
+# Utils
+#-------------------------------------------------------------------------------
+
+	function __printf(){
+		local text color prefix
+		text=${1:-}; color=${2:-white2}; prefix=${!3:-};
+		[ $opt_quiet -eq 1 ] && [ -n "$text" ] && printf "${prefix}${!color}%b${x}" "${text}" 1>&2 || :
+	}
+
+
+
+	function __sleep(){
+		[ $opt_yes -eq 1 ] && sleep 1 || :
+	}
+
+
+	function pass(){ local text=${1:-}; __printf "$pass $text\n" "green"; }
+	function error(){ local text=${1:-}; __printf "$fail $text\n" "red"; }
+	function warn(){ local text=${1:-}; __printf "$delta $text$x\n" "orange";  }
+	function info(){ local text=${1:-}; [ $opt_debug -eq 0 ] && __printf "$lambda$text\n" "blue"; }
+	function ninfo(){ local text=${1:-}; [ $opt_debug -eq 0 ] && __printf "$lambda$text\n" "orange"; }
+	function does(){ local text=${1:-}; [ $opt_debug -eq 0 ] && __printf "$delta $text\n" "white2"; }
+
+	function die(){ __printf "$red$fail $1$x$nl"; exit 1; }
+
+	function fatal(){ trap - EXIT; __printf "\n$red$fail $1 [$2] \n"; exit 1; }
+	function quiet(){ [ -t 1 ] && opt_quiet=${1:-1} || opt_quiet=1; }
+
+
+	function confirm(){
+		local ret;ret=1
+		__printf "${1}? > " "white2" #Are you sure ?
+		[ $opt_yes -eq 0 ] && __printf "${bld}${green}auto yes${x}\n" && return 0;
+		[[ -f ${BASH_SOURCE} ]] && src='/dev/stdin' || src='/dev/tty'
+
+		while read -r -n 1 -s answer < $src; do
+			[ $? -eq 1 ] && exit 1;
+			if [[ $answer = [YyNn10tf+\-q] ]]; then
+				 [[ $answer = [Yyt1+] ]] && __printf "${bld}${green}yes${x}" && ret=0 || :
+				 [[ $answer = [Nnf0\-] ]] && __printf "${bld}${red}no${x}" && ret=1 || :
+				 [[ $answer = [q] ]] && __printf "\n" && exit 1 || :
+				break
+			fi
+		done
+		__printf "\n"
+		return $ret
+	}
+
+
+#-------------------------------------------------------------------------------
+# Sig / Flow
+#-------------------------------------------------------------------------------
+
+
+	function handle_sigint() {
+		S="$?"
+		kill 0
+		exit $S
+	}
+
+	function handle_sigtstp() {
+		kill -s SIGSTOP $$
+	}
+
+	function handle_input(){
+		[ -t 0 ] && stty -echo -icanon time 0 min 0
+	}
+
+	function cleanup(){
+		[ -t 0 ] && stty sane
+	}
+
+	function fin(){
+		local E="$?"
+		cleanup
+		if [ -z "$opt_readonly_mode" ]; then
+			[ $E -eq 0 ] && printf "${green}${pass} ${1:-Done}." \
+									 || printf "$red$fail ${1:-${err:-Cancelled}}."
+		fi
+	}
+
+
+#-------------------------------------------------------------------------------
+# Traps
+#-------------------------------------------------------------------------------
+
+
+	trap handle_sigint INT
+	trap handle_sigtstp SIGTSTP
+	trap handle_input CONT
+	trap fin EXIT
+
+#-------------------------------------------------------------------------------
+# FX API
+#-------------------------------------------------------------------------------
+
+
+	function api_options(){
+
+
+		for arg in "${@}"; do
+			case "$arg" in
+				--quiet)
+					opt_quiet=0
+					opt_yes=0
+					;;
+				--debug)
+					opt_debug=0
+					;;
+				--system)
+					opt_local=0
+					FX_PREFIX="/usr/local/fx/this"
+					;;
+				--local)
+					opt_local=1
+					FX_PREFIX="$HOME/.this"
+					;;
+				--nuke)
+					opt_nuke=0
+					;;
+				--clean)
+					opt_clean=0
+					;;
+				--yes)
+					opt_yes=0
+					;;
+			esac
+		done
+
+	}
+
+
+	function api_set_path(){
+		:
+	}
+
+	function api_check_deps(){
+		if ! check_deps "${_DEPS_LOCAL[@]}"; then
+			echo "Missing dependencies! [ ${_DEPS_MISSING[@]} ] ";
+			return 1
+		else
+			unset _DEPS_MISSING _DEPS_LOCAL dep;
+			return 0
+		fi
+	}
+
+	function dispatch(){
+		return 1;
+	}
+
+	function main(){
+		does "try main"
+		local args=("${@}")
+		dispatch "${args[@]}";ret=$?
+		return $ret
+	}
+
+#-------------------------------------------------------------------------------
+# FX Driver
+#-------------------------------------------------------------------------------
+
+
+	if [ "$0" = "-bash" ]; then
+		:
+	else
+
+		if api_check_deps; then 
+			orig_args=("${@}")
+		
+			api_options "${orig_args[@]}"
+			args=( "${orig_args[@]/\-*}" ); #delete anything that looks like an option
+			main "${args[@]}";ret=$?
+		fi
+
+	fi
+
+
+
+
+#=====================================!code=====================================
+
+
+
+
+
+#====================================doc:help!==================================
+#
+#  \n\t${b}fx-install --option [<n>ame] [<p>ath]${x}
+#
+#  \t${o}home: $FX${x}
+#  \t${o}size: ($count)${x}
+#  \t${w}Commands:${x}
+#
+#  \t${b}--quiet
+#  \t${b}--debug
+#  \t${b}--system
+#  \t${b}--local
+#  \t${b}--nuke
+#  \t${b}--clean  : 
+#  \t${b}--yes    : respond yes to all prompts
+#
+#=================================!doc:help=====================================

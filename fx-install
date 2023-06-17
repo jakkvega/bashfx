@@ -39,9 +39,12 @@
     opt_run=1
     opt_pipe=1
     opt_silly=1
+    opt_wizard=1
+    logo=$(sed -n '3,12 p' $BASH_SOURCE)
 
     _DEPS_LOCAL=(tput printf sed git find sleep);
     _DEPS_MISSING=();
+    FX_INSTALLED=1;
 
     function command_exists(){
         type "$1" &> /dev/null ;
@@ -108,13 +111,13 @@
   function pass(){ local text=${1:-}; __printf "$pass $text\n" "green"; }
   function error(){ local text=${1:-}; __printf "$fail $text\n" "red"; }
   function silly(){ local text=${1:-}; [ $opt_silly   -eq 0 ] && __printf "$dots $text\n" "purple"; }
-  function warn(){ local text=${1:-}; __printf "$delta $text$x\n" "orange";  }
+  function warn(){ local text=${1:-}; [ $opt_debug -eq 0 ] && __printf "$delta $text$x\n" "orange";  }
   function info(){ local text=${1:-}; [ $opt_debug -eq 0 ] && __printf "$lambda $text\n" "blue"; }
   function does(){ local text=${1:-}; [ $opt_debug -eq 0 ] && __printf "$delta $text\n" "purple"; }
 
 
 
-  function fatal(){ trap - EXIT; __printf "\n$red$fail $1 [$2] \n"; exit 1; }
+  function fatal(){ trap - EXIT; __printf "\n$red$fail $1 $2 \n"; exit 1; }
   function quiet(){ [ -t 1 ] && opt_quiet=${1:-1} || opt_quiet=1; }
 
 
@@ -129,7 +132,7 @@
           if [[ $answer = [YyNn10tf+\-q] ]]; then
                [[ $answer = [Yyt1+] ]] && __printf "${bld}${green}yes${x}" && ret=0 || :
                [[ $answer = [Nnf0\-] ]] && __printf "${bld}${red}no${x}" && ret=1 || :
-               [[ $answer = [q] ]] && __printf "\n" && exit 1 || :
+               [[ $answer = [q] ]] && __printf "${bld}${purple}quit${x}\n" && exit 1 || :
               break
           fi
       done
@@ -148,6 +151,33 @@
     done
     echo $__VALUE
   }
+
+  function prompt_path(){
+    local res ret next __NEXT_DIR
+    prompt="$1"
+    prompt_sure="$2"
+    default="$3"
+    prompt=$(eval echo "$prompt")
+    [[ -f ${BASH_SOURCE} ]] && src='/dev/stdin' || src='/dev/tty'
+    while [[ -z "$next" ]]; do
+      read -p "$prompt ($default)$nl > ${bld}${green}" __NEXT_DIR < $src;
+      res=$(eval echo $__NEXT_DIR)
+      [ -z "$res" ] && res="$default"
+      if [ -n "$res" ]; then
+        if confirm "${x}${prompt_sure} [ ${blue}$res${x} ] (y/n/q)"; then
+          if [ ! -d "$res" ]; then
+            error "Couldn't find the directory ($res). Try Again. Or 'q' to exit."
+          else
+            next=1
+          fi
+        fi
+      else
+        warn "Invalid Entry! Try Again."
+      fi
+    done
+    echo "$res"
+  }
+
 
 #-------------------------------------------------------------------------------
 # Sig / Flow
@@ -184,12 +214,12 @@
 
 
     function fx_repair_check(){
-      if [ $FX_INSTALLED -eq 0 ] && [ ! -z "$FX_PREFIX" ]; then
+      if [ $FX_INSTALLED -eq 0 ] && [ -n "$FX_PREFIX" ]; then
         msg="FX is already installed, attempt repair"
 
         [ $opt_clean -eq 0 ] && { FX_PREFIX=; msg="Clean repair with unset prefix";  }
 
-        if confirm "$msg (y/n=cancel)"; then
+        if confirm "$msg (y/n/q)"; then
           info "Repairing..."
           __sleep
           api_clean 0
@@ -199,18 +229,26 @@
           exit 0
         fi
       else
-        info "Installing... ($FX_PREFIX)"
+        info "Installing... (FX_PREFIX=$FX_PREFIX)"
         __sleep
       fi
     }
 
     function fx_prefix_check(){
+      local res ret;
+      FX_OPT_SYS="/opt/fx/this"
+      FX_OPT_HOME="$HOME/.this"
+
+
+
       if [ -z "$FX_PREFIX" ]; then
         warn "FX_PREFIX not defined."
-        if confirm "Install BASHFX for just the current user [$HOME/.this] (y/n)"; then
+        if confirm "Install BASHFX on the default user path [$FX_OPT_HOME] (y/n/q)"; then
           FX_PREFIX="$FX_OPT_HOME"
         else
-          FX_PREFIX="$FX_OPT_USER"
+          FX_PREFIX="$FX_OPT_HOME"
+          res=$(prompt_path "Where to set \${blue}FX_PREFIX\$x root directory" "Is this correct" "$FX_PREFIX");ret=$?;
+          FX_PREFIX="$res"
         fi
       else
         info "BASHFX will set <FX_PREFIX> and install to [ $FX_PREFIX ]\n"
@@ -242,6 +280,20 @@
           fatal "${red}Install directory [$this] is not writeable. Cannot create directories.${x}\n";
         fi
       done
+    }
+
+    function fx_nuke_dirs(){
+      info "Nuking Directories..."
+      for this in "${FX_DIRS[@]}"; do
+        if [ $opt_quiet -eq 1 ]; then
+          [ ! -d $this ] && warn "$this does not exist"
+          [ -d $this ] && { if confirm "Force remove ${this} dir? (y/n/q)"; then rm -rf $this; fi } || :
+          [ -d $this ] && fatal "Unable to remove directory [$this] please check permissions." || :
+        else
+          rm -rf $this;
+        fi
+      done
+
     }
 
 
@@ -296,6 +348,21 @@
     }
 
 
+  #show all the FX_* variables set in the environment
+  function fx_dump(){
+    local len arr i this flag newl 
+    [ $opt_quiet -eq 0 ] && return 0;
+    newl="\n"
+    vars=($(set | grep -E ^THIS_[^=]+=.* | cut -d "=" -f1))
+    for this in "${vars[@]}"; do
+      printf "$this = ${!this} $newl"
+    done
+    vars=($(set | grep -E ^FX_[^=]+=.* | cut -d "=" -f1))
+    for this in "${vars[@]}"; do
+      printf "$this = ${!this} $newl"
+    done
+  }
+
 
 #-------------------------------------------------------------------------------
 # FX API
@@ -304,7 +371,17 @@
 
 
     function api_nuke(){
-        :
+      local force=${1:-1};
+      if [ $opt_nuke -eq 0 -o $force -eq 0 ]; then
+        fx_vars;
+        if [ -n $FX_PREFIX -a -d $FX_PREFIX ]; then
+          FX_DIRS=($THIS_LIB $THIS_BIN $THIS_ETC $THIS_DATA $THIS_SERV);
+          fx_nuke_dirs
+        fi
+        api_clean 0
+      fi
+      fx_dump
+      return 0
     }
 
 
@@ -321,7 +398,7 @@
 
     function api_install(){
 
-     local steps=(fx_repair_chec fx_prefix_check fx_vars fx_create_dirs fx_rc_file_check fx_copy_installer)
+     local steps=(fx_repair_check fx_prefix_check fx_vars fx_create_dirs fx_rc_file_check fx_copy_installer)
 
       for step in "${steps[@]}"; do
         # Call the function and capture its return value
@@ -331,11 +408,11 @@
         # Check the status of the step
         if [ $step_status -eq 0 ]; then
           info "Step ($step) completed successfully."
-        else [ $step_status -eq 1 ]; then
+        else 
           warn "Step ($step) was not executed."
         fi
 
-        if [ -n "$err" ];
+        if [ -n "$err" ]; then
           # Handle the fatal error condition
           error "Step ($step) encountered a fatal error. ($err)"
           break
@@ -344,11 +421,16 @@
       done
 
       if [ -n "$err" ]; then 
-        [ $opt_nuke -eq 0 ] && { msg="The installation has failed with nuke mode enabled. All files stored in $FX_PREFIX will be lost. Continue? ";  }
-        if confirm "$msg (y/n=cancel)"; then
-          api_nuke()
+        
+        msg="${fail} All files stored in ($FX_PREFIX) will be lost in order to cleanup. Continue? ";
+        
+        if confirm "$msg (y/n/q)"; then
+          info "Cleaning up..."
+          __sleep 1
+          api_nuke
+          err="Installation terminated."
         else
-          fatal "Installation failed." "$err"
+          fatal "Installation terminated." "$err"
         fi
 
       fi
@@ -386,7 +468,7 @@
                     opt_debug=0
                     info "debug_mode"
                     ;;
-                --system)
+                --sys*)
                     opt_local=0
                     FX_PREFIX="/opt/fx/this"
                     info "system_install"
@@ -398,6 +480,9 @@
                     ;;
                 --nuke)
                     opt_nuke=0
+                    ;;
+                --wiz*)
+                    opt_wizard=0
                     ;;
                 --clean|-C)
                     opt_clean=0
@@ -444,6 +529,7 @@
 
     function main(){
       local ret args=("${@}")
+      printf "\n\n\n\n\n$blue${logo//#/ }\n\tInstall$x\n\n"
       dispatch "$@"; ret=$?;
       [ -n "$err" ] && fatal "$err" || stderr "$out";
       return $ret

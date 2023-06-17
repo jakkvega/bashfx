@@ -71,8 +71,7 @@
 	fail="${red}\xE2\x9C\x97"
 	lambda="\xCE\xBB"
 	line="##---------------$nl"
-	bline="$(sed -n '2,2 p' $BASH_SOURCE)$nl"
-	line="$(sed -n '3,3 p' $BASH_SOURCE)$nl"
+
 
 
 

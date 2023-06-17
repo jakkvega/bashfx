@@ -30,6 +30,7 @@
     opt_local=1
     opt_nuke=1
     opt_clean=1
+    opt_run=1
 
     _DEPS_LOCAL=(tput printf sed git sleep xbean);
     _DEPS_MISSING=();
@@ -49,6 +50,12 @@
         return 0;
     }
 
+
+    if [ -t 0 ]; then
+      echo "Script is being run from a terminal."
+    else
+      echo "Script is being run from a pipe."
+    fi
 
 
 #-------------------------------------------------------------------------------
@@ -162,7 +169,6 @@
 # Traps
 #-------------------------------------------------------------------------------
 
-
     trap handle_sigint INT
     trap handle_sigtstp SIGTSTP
     trap handle_input CONT
@@ -198,6 +204,9 @@
                     ;;
                 --clean)
                     opt_clean=0
+                    ;;
+                --run)
+                    opt_run=0
                     ;;
                 --yes)
                     opt_yes=0

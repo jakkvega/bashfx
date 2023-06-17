@@ -24,14 +24,14 @@
 # CHECK FOR BASIC DEPENDENCIES
 #-------------------------------------------------------------------------------
 
-        opt_debug=1
-        opt_quiet=1
-        opt_yes=1
-        opt_local=1
-        opt_nuke=1
-        opt_clean=1
+    opt_debug=1
+    opt_quiet=1
+    opt_yes=1
+    opt_local=1
+    opt_nuke=1
+    opt_clean=1
 
-    _DEPS_LOCAL=(tput printf sed git sleep);
+    _DEPS_LOCAL=(tput printf sed git sleep xbean);
     _DEPS_MISSING=();
 
     function command_exists(){
@@ -244,7 +244,6 @@
 
         if api_check_deps; then 
             orig_args=("${@}")
-        
             api_options "${orig_args[@]}"
             args=( "${orig_args[@]/\-*}" ); #delete anything that looks like an option
             main "${args[@]}";ret=$?

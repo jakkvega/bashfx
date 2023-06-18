@@ -590,7 +590,7 @@
 			stat*)   cmd="status";;
 			inst*)   cmd="api_install";;
 			vars*)   cmd="fx_vars";;
-			rc*)		 cmd="rc_make";;	
+			rc*)	 cmd="rc_make";;	
 			rmrc*)	 cmd="rc_nuke";;
 			link*)   cmd="fx_link";;
 			unli*)	 cmd="fx_unlink";;

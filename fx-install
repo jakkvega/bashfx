@@ -47,6 +47,7 @@
 	red=$(tput setaf 1)
 	green=$(tput setaf 2)
 	blue=$(tput setaf 39)
+	blue2=$(tput setaf 27)
 	cyan=$(tput setaf 14)
 	orange=$(tput setaf 214)
 	purple=$(tput setaf 213)
@@ -107,14 +108,13 @@
 	__logo(){
 		if [ $opt_quiet -eq 1 ]; then
 			local logo=$(sed -n '3,12 p' $BASH_SOURCE)
-			printf "\n\n\n\n\n$blue${logo//#/ }\n\tFX-Install$x\n\n"
+			printf "\n$blue${logo//#/ }$x\n"
 		fi
 	}
 
 	error(){ local text=${1:-}; __printf " $text\n" "fail"; }
-	warn(){ local text=${1:-}; [ $opt_quiet -eq 1 ] &&__printf "$delta  $text$x\n" "orange"; }
-	okay(){ local text=${1:-}; [ $opt_quiet -eq 1 ] &&__printf "$pass $text$x\n" "green"; }
-
+	warn(){ local text=${1:-}; [ $opt_debug -eq 0 ] &&__printf "$delta  $text$x\n" "orange"; }
+	okay(){ local text=${1:-}; [ $opt_debug -eq 0 ] &&__printf "$pass $text$x\n" "green"; }
 	info(){ local text=${1:-}; [ $opt_debug -eq 0 ] && __printf "$lambda $text\n" "blue"; }
 	trace(){ local text=${1:-}; [ $opt_trace -eq 0 ] && __printf "$idots $text\n" "grey"; }
 
@@ -161,7 +161,7 @@
 
 	#prints content between sed block
 	block_print(){
-		local o=$orange;b=$blue;g=$green;r=$red;w=$white; #shortcut colors
+		local o=$orange;b=$blue;b2=$blue2;p=$purple;g=$green;r=$red;w=$white2;u=$grey; #shortcut colors
 		local lbl="$1" IFS res;
 		res=$(sed_block $lbl);
 		if [ ${#res} -gt 0 ]; then
@@ -275,10 +275,13 @@
 	create_dirs(){
 		local prefix="$FX_PREFIX" rel_dirs this
 		rel_dirs=("lib/bashfx" "etc/bashfx" bin priv data);
+
+		local FX_DIRS=($FX_LIB $FX_BIN $FX_ETC $FX_DATA $FX_SERV);
+
 		for this in "${rel_dirs[@]}"; do
 			this="${prefix}/${this}"
-			[ ! -d $this ] && { info "Creating Directory $this..."; mkdir -p $this; } || warn "Directory $this already exists";
 			[ ! -w $this ] && fatal "Install directory [$this] is not writeable. Exiting." || :;
+			[ ! -d $this ] && { info "Creating Directory $this..."; mkdir -p $this; } || info "Directory $this already exists";
 		done
 	}
 
@@ -539,6 +542,19 @@
 		profile_unlink $FX_CONF_FILE;
 	}
 
+	fx_nuke_dirs(){
+	  trace "nuking Directories..."
+	  for this in "${FX_DIRS[@]}"; do
+	    if [ $opt_quiet -eq 1 ]; then
+	      [ ! -d $this ] && warn "$this does not exist"
+	      [ -d $this ] && { if confirm "Force remove ${this} dir? (y/n/q)"; then rm -rf $this; fi } || :
+	      [ -d $this ] && fatal "Unable to remove directory [$this] please check permissions." || :
+	    else
+	      rm -rf $this;
+	    fi
+	  done
+
+	}
 
 #-------------------------------------------------------------------------------
 # FX Main
@@ -635,6 +651,35 @@
 		:
 	}
 	
+	api_nuke(){
+	  local force=${1:-1};
+	  if [ $opt_nuke -eq 0 -o $force -eq 0 ]; then
+	    fx_vars;
+	    if [ -n $FX_PREFIX -a -d $FX_PREFIX ]; then
+	      FX_DIRS=($THIS_LIB $THIS_BIN $THIS_ETC $THIS_DATA $THIS_SERV);
+	      fx_nuke_dirs
+	    fi
+	    api_clean 0
+	  fi
+	  fx_dump
+	  return 0
+	}
+	
+
+	api_clean(){
+		local force=${1:-1};
+		if [ $opt_clean -eq 0 -o $opt_nuke -eq 0 -o $force -eq 0 ]; then
+			info "Cleaning..."
+			profile_unlink $FX_CONF_FILE;
+			[ -f $FX_CONF_FILE ] && rm $FX_CONF_FILE || :;
+			[ -f "$FX_CONF_FILE" ] && die "Unable to delete conf file for cleanup" || :
+			[ $force -eq 0 ] && fx_unset 0 || fx_unset
+		else
+			printf "Didnt clean $opt_clean"
+		fi
+		return 0
+	}
+
 	api_repair(){
 		:
 		#has prefix
@@ -663,6 +708,7 @@
 			link*)   cmd="fx_link";;
 			unli*)   cmd="fx_unlink";;
 			show*)   cmd="fx_show_file";;
+			nuke*)   cmd="api_nuke";;
 			#unin*)   cmd="api_uninstall";;
 			#dl)       cmd="api_download";;
 			*)
@@ -679,11 +725,9 @@
 		return $ret;
 	}
 
-
 	main(){
 		local args=("${@}")
 		__logo
-		__sleep #let logo shine
 		file_match "$script_id" #setup match blocks
 		dispatch "${args[@]}";ret=$?
 		[ $opt_dump -eq 0 ] && status || :;
@@ -714,26 +758,31 @@
 #-------------------------------------------------------------------------------
 #=====================================!code=====================================
 #====================================doc:help!==================================
+#  \n\t${b}fx-install <cmd> [--options]${x}
 #
-#  \n\t${b}fx-install --option [<n>ame] [<p>ath]${x}
+#  \t${w}Commands:${x}
+#		
+#  \t${u}inst uninst
+#  \t${u}help stat
+#  \t${u}rc rmrc
+#  \t${u}link unlink
+#  \t${u}vars
+#
+#  \t${u}--quiet  : disable versbosity, useful for subshells
+#  \t${u}--debug  : level 1 verbosity
+#  \t${u}--trace  : level 2 verbosity
+#  \t${u}--system : sets default prefix to system path
+#  \t${u}--local  : sets default prefi to user path
+#  \t${u}--nuke   : nuke folders and files as needed
+#  \t${u}--clean  : reset vars and rc files
+#  \t${u}--yes    : respond yes to all prompts
+#
+#  \t${w}Meta:${x}
 #
 #  \t${o}home: $FX_PREFIX${x}
 #  \t${o}linked: $FX_BASH_PROFILE${x}
 #  \t${o}rcfile($hasRCfile): $FX_CONF_FILE ${x}
-#  \t${w}Commands:${x}
 #
-#  \t${b}help stat
-#  \t${b}rc rmrc
-#  \t${b}link unlink
-#  \t${b}vars
-#
-#  \t${o}--quiet
-#  \t${o}--debug
-#  \t${o}--system
-#  \t${o}--local
-#  \t${o}--nuke
-#  \t${o}--clean  : 
-#  \t${o}--yes    : respond yes to all prompts
 #${x}
 #=================================!doc:help=====================================
 

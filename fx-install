@@ -44,7 +44,7 @@
 # Term
 #-------------------------------------------------------------------------------
 
-	red=$(tput setaf 1)
+	red=$(tput setaf 9)
 	green=$(tput setaf 2)
 	blue=$(tput setaf 39)
 	blue2=$(tput setaf 27)

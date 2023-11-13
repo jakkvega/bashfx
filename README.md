@@ -1,10 +1,23 @@
 # BashFX
 Bash utility script for managing bash scriptlets.
 
-## Install FX and FX-SETUP
+
+
+## 1 Get setup script
 `curl -L https://git.io/fx-setup  | bash -s -- inst --yes --debug`
 
 
+## 2 Generate Opinionated Paths
+
+Set $FX_PREFIX
 
 
+## 3 Load Utility Scripts
+
+Get setup utilities
+> https://raw.githubusercontent.com/qodeninja/bashfx/stable
+
+
+
+## 4 Load Optional Scripts
 

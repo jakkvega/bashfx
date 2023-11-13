@@ -13,8 +13,9 @@
 #-------------------------------------------------------------------------------
 #$ name:bashfx-setup
 #$ author:qodeninja
-#$ autobuild: 00001
 #$ date:
+#$ semver:
+#$ autobuild: 00002
 #-------------------------------------------------------------------------------
 #=====================================code!=====================================
 
@@ -375,12 +376,16 @@
 	}
 
 	function api_options(){
+
+    local this next opts=("${@}");
+
 		opt_debug=1
 		opt_quiet=1
 		opt_yes=1
 		opt_local=1
 		opt_nuke=1
 		opt_clean=1
+    opt_custom=1
 
 		FX_THIS_DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" || exit; pwd -P)"
 		FX_ROOT_DIR="$( cd "$FX_THIS_DIR" && cd .. || exit; pwd -P)"
@@ -397,8 +402,12 @@
 
 		[ -f "$FX_BASH_PROFILE" ] || FX_BASH_PROFILE="$HOME/.bash_profile"
 
-		for arg in "${@}"; do
-			case "$arg" in
+    #for arg in "${@}"; do
+
+		for ((i=0; i<${#opts[@]}; i++)); do
+      this=${opts[i]}
+      next=${opts[i+1]}
+			case "$this" in
 				--quiet)
 					opt_quiet=0
 					opt_yes=0
@@ -407,11 +416,18 @@
 					opt_debug=0
 					;;
 				--system)
-					opt_local=0
+          #this requires usr local to be writeable by user
+          die "Please use --local flag, --system no longer supported"
+					opt_local=1
 					FX_PREFIX="/usr/local/my"
 					;;
 				--local)
-					opt_local=1
+					opt_local=0
+					FX_PREFIX="$HOME/.my"
+					;;
+				--custom)
+          warn "Using custom prefix path=${next}"
+					opt_custom=0
 					FX_PREFIX="$HOME/.my"
 					;;
 				--nuke)

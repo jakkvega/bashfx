@@ -21,13 +21,13 @@
 
 
 echo "hello world"
-echo "$0"
+echo "$BASH_SOURCE"
 
 
 #curl -s -L https://git.io/fx-setup | bash -s --  --yes --debug
 col_red="\x1b[38;5;9m"
 col_green="\x1b[38;5;34m"
-col_orange="\x1b[38;5;215m"
+col_orange="\x1b[38;5;208m"
 col_blue="\x1b[38;5;32m"
 col_end="\x1b[1;0m"
 
@@ -37,6 +37,11 @@ opt_debug=1
 opt_clean=1
 opt_prefix=1
 opt_prefix_path=""
+
+__logo(){
+  local logo=$(sed -n '3,12 p' $BASH_SOURCE)
+  printf "\n${col_blue}${logo//#/ }${col_end}\n" 1>&2;
+}
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -71,9 +76,11 @@ done
 
 
 if [[ $inst_flag != true ]]; then
+  __logo
+  echo -en "BASHFX v3\n\n"
   echo -en "${col_orange}Warning: You opted to use BASHFX download only mode.\n"
   echo -en "If you forgot to run with --inst, you can do so again.\n"
-  echo -en "Otherwise you can run the downloaded file.${col_end}\n"
+  echo -en "Otherwise you can run the downloaded file.${col_end}\n\n"
 
   # countdown=100
   # while [ $countdown -gt 0 ]; do
@@ -92,7 +99,7 @@ if [[ $inst_flag != true ]]; then
   if [ -d $install_path ]; then
 
     cd $install_path;
-    curl -S -L -o "${install_path}/fx-install.sh" https://git.io/fx-install
+    curl -sS -L -o "${install_path}/fx-install.sh" https://git.io/fx-install
     chmod +x "fx-install.sh"
     case ":$install_path:" in
       *":$PATH:"*) 
@@ -103,13 +110,12 @@ if [[ $inst_flag != true ]]; then
       ;;
     esac
 
-    if [ -n "$(which fx-install.sh)" -a -x "fx-install.sh" ] ; then
+    fqp=$(which fx-install.sh)
+    if [ -n "$fqp" -a -x "fx-install.sh" ] ; then
       alias fxi="fx-install.sh"
       alias fxicd="cd ${install_path}; ls -la"
-      echo "PATH has been temporarily updated. Use:\n"
-      echo -en "> ${col_orange}fx-install.sh install${col_x}\n"
-      echo -en "> ${col_orange}fxi${col_x} #run install alias\n"
-      echo -en "> ${col_orange}fxicd${col_x} #jump to install dir\n"
+      echo -en "-> ${col_green}Setup complete.${col_x}\n\n"
+      echo -en "-> Run: ${col_blue}fx-install.sh install${col_x}\n"
     else
       echo "Error: fx-install.sh not executable\n"
     fi

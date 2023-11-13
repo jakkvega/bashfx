@@ -92,6 +92,70 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+
+
+#-------------------------------------------------------------------------------
+# Config
+#-------------------------------------------------------------------------------
+
+  config_file_str(){
+    local data
+    data+=""
+    data="$(cat <<-EOF
+      #!/usr/bin/env bash
+      ### bashfx install file ###
+      # do not edit
+      # created: $(date)
+        echo "BASHFX INSTALL CONF IS HERE!"
+        export FX_INSTALLED=1
+        export FX_DEBUG_MODE=${opt_debug}
+        export FX_INSTALL_YES_MODE=${opt_yes}
+        export FX_INSTALL_HOME="${install_home}"
+        export FX_CUSTOM_PREFIX="${opt_prefix_path}"
+        export FX_BIN="$FX_BIN"
+        if [[ ! "\$PATH" =~ "\$FX_INSTALL_HOME\bin" ]]; then
+          export PATH=\$PATH:\$FX_INSTALL_HOME\bin;
+        fi
+EOF
+    )";
+    echo "$data"
+  }
+
+
+  config_make(){
+    local src data ret=1
+    #echo -ne "Saving $1 file..."
+    src="$1"
+    if [ -n $src ]; then
+      data="$(config_file_str)"
+      echo -e "$data" > ${src}
+      profile_src="$HOME/.profile"
+      if [ -f "${src}" ]; then
+        if ! grep -q 'source .*/bashfx\-install\.conf' $profile_src; then
+          echo "source ${install_home}/bashfx-install.conf" >> $profile_src
+          ret=$?
+        else
+          #echo "source line already added"
+          ret=0
+        fi
+      else
+       ret=1 
+      fi
+    fi
+    return $ret
+  }
+
+
+
+# Remove the line if it's present
+# sed -i '/source .*\/myfile\.conf/d' ~/.profile
+
+
+#-------------------------------------------------------------------------------
+# Main
+#-------------------------------------------------------------------------------
+
+
 #pre nuke install directory
 if [ $opt_clean -eq 0 ]; then
   [ -d "$install_home" ] && rm -rf "$install_home" || :;
@@ -124,18 +188,11 @@ if [ $opt_safe -eq 0 ]; then
 
   if [ $opt_prefix -eq 0 ]; then
     __printf "-> Custom Prefix ${opt_prefix_path}"
+  else
+    opt_prefix_path="$HOME/Z_BASHFX"
+    __printf "-> Default Prefix ${col_orange}${opt_prefix_path}${col_end}"
   fi 
   
-
-#       data="$(cat <<-EOF
-# ### bashfx install -  $(date)
-# FX_INSTALL_YES_MODE=${opt_yes}
-# FX_INSTALL_HOME="${install_home}"
-# FX_INSTALL_PREFIX=""
-# ########
-# EOF
-#       )";
-
 
   
   #check we could create it
@@ -158,8 +215,13 @@ if [ $opt_safe -eq 0 ]; then
     fqp=$(which fx-install.sh)
 
     if [ -n "$fqp" -a -x "fx-install.sh" ] ; then
-      __printf "-> ${col_green}Setup complete.${col_x}"
-      __printf "-> Run: ${col_blue}fx-install.sh install${col_x}"
+
+      if config_make "${install_home}/bashfx-install.conf"; then
+        __printf "-> ${col_green}Setup complete.${col_x}"
+        __printf "-> Run: ${col_blue}fx-install.sh install${col_x}"
+      else
+        __printf "Error."
+      fi
     else
       echo "Error: fx-install.sh not executable\n"
     fi

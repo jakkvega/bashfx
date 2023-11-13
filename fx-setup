@@ -1,4 +1,91 @@
+#!/usr/bin/env bash
+#===============================================================================
+#
+#  ________  ________  ________  ___  ___  ________ ___    ___ 
+# |\   __  \|\   __  \|\   ____\|\  \|\  \|\  _____|\  \  /  /|
+# \ \  \|\ /\ \  \|\  \ \  \___|\ \  \\\  \ \  \__/\ \  \/  / /
+#  \ \   __  \ \   __  \ \_____  \ \   __  \ \   __\\ \    / / 
+#   \ \  \|\  \ \  \ \  \|____|\  \ \  \ \  \ \  \_| /     \/  
+#    \ \_______\ \__\ \__\____\_\  \ \__\ \__\ \__\ /  /\   \  
+#     \|_______|\|__|\|__|\_________\|__|\|__|\|__|/__/ /\ __\ 
+#                        \|_________|              |__|/ \|__| 
+#                                                             
+#-------------------------------------------------------------------------------
+#$ name:bashfx-setup
+#$ author:qodeninja
+#$ date:
+#$ semver:
+#$ autobuild: 00005
+#-------------------------------------------------------------------------------
+#=====================================code!=====================================
+
+
 echo "hello world"
-
-
 echo "$0"
+
+
+#curl -s -L https://git.io/fx-setup | bash -s -- --inst --yes --debug
+
+opt_yes=1
+opt_install=1
+opt_debug=1
+opt_prefix=1
+opt_prefix_path=""
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --inst)
+      opt_install=0;
+      shift 
+      ;;
+    --yes)
+      opt_yes=0;
+      shift 
+      ;;
+    --debug)
+      opt_debug=0;
+      shift 
+      ;;
+    --path)
+      opt_prefix=0;
+      opt_prefix_path="$2";
+      shift 
+      shift 
+      ;;
+    *)
+      shift 
+      ;;
+  esac
+done
+
+if [[ $inst_flag != true ]]; then
+  echo "Warning: You opted to use BASHFX download only mode."
+  echo "If you forgot to run with --inst, you can do so again."
+  echo "Otherwise you can run the downloaded file."
+
+  countdown=10
+  while [ $countdown -gt 0 ]; do
+    echo -ne "Continue? $countdown\033[0K\r"
+    if read -r -t 1 -n 1; then
+      exit 0
+    fi
+    : $((countdown--))
+  done
+
+  
+  install_path="$HOME/BASHFX_INSTALL/bin"
+  mkdir -p "$install_path" 
+  if [ -d $install_path ]; then
+    curl -L -o "${install_path}/fx-setup.sh" https://git.io/fx-setup
+  else
+    echo "Error: Cant create install directory ($install_path)"
+  fi
+  
+  # Optionally, print or do something with the downloaded script here
+  
+  # Exit the script
+  exit 0
+
+else
+  echo "Install mode not enabled at this time."
+fi

@@ -19,34 +19,53 @@
 #-------------------------------------------------------------------------------
 #=====================================code!=====================================
 
+#-------------------------------------------------------------------------------
+# Deps
+#-------------------------------------------------------------------------------
 
-echo "hello world"
-echo "$BASH_SOURCE"
+#--> sed curl chmod
 
+#-------------------------------------------------------------------------------
+# Vars and Paths
+#-------------------------------------------------------------------------------
+install_home="$HOME/Z_BASHFX_INSTALL"
+install_path="$install_home/bin"
 
-#curl -s -L https://git.io/fx-setup | bash -s --  --yes --debug
-col_red="\x1b[38;5;9m"
+#-------------------------------------------------------------------------------
+# Term Colors
+#-------------------------------------------------------------------------------
+col_red="\x1b[38;5;198m"
 col_green="\x1b[38;5;34m"
 col_orange="\x1b[38;5;208m"
 col_blue="\x1b[38;5;32m"
 col_end="\x1b[1;0m"
-
-opt_yes=1
-opt_install=1
-opt_debug=1
-opt_clean=1
-opt_prefix=1
-opt_prefix_path=""
 
 __logo(){
   local logo=$(sed -n '3,12 p' $BASH_SOURCE)
   printf "\n${col_blue}${logo//#/ }${col_end}\n" 1>&2;
 }
 
+__printf(){
+  local text=${1:-}; 
+  [ -n "$text" ] && printf "%b" "${text}\n" 1>&2 || :
+}
+
+#-------------------------------------------------------------------------------
+# Options
+#-------------------------------------------------------------------------------
+
+opt_yes=1
+opt_safe=1
+opt_debug=1
+opt_clean=1
+opt_prefix=1
+opt_prefix_path=""
+
+
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --inst)
-      opt_install=0;
+    --safe)
+      opt_safe=0;
       shift 
       ;;
     --clean)
@@ -61,7 +80,7 @@ while [[ $# -gt 0 ]]; do
       opt_debug=0;
       shift 
       ;;
-    --path)
+    --prefix)
       opt_prefix=0;
       opt_prefix_path="$2";
       shift 
@@ -73,14 +92,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+#pre nuke install directory
+if [ $opt_clean -eq 0 ]; then
+  [ -d "$install_home" ] && rm -rf "$install_home" || :;
+fi
 
+#run in safe mode (download script)
+if [ $opt_safe -eq 0 ]; then
 
-if [[ $inst_flag != true ]]; then
   __logo
-  echo -en "BASHFX v3\n\n"
-  echo -en "${col_orange}Warning: You opted to use BASHFX download only mode.\n"
-  echo -en "If you forgot to run with --inst, you can do so again.\n"
-  echo -en "Otherwise you can run the downloaded file.${col_end}\n\n"
+  __printf "BASHFX v3\n\n"
+  __printf "-> Running BASHFX setup in ${col_orange}--safe${col_end} mode."
 
   # countdown=100
   # while [ $countdown -gt 0 ]; do
@@ -92,13 +114,36 @@ if [[ $inst_flag != true ]]; then
   # done
 
   #setup an obvious install path
-  install_path="$HOME/Z_BASHFX_INSTALL/bin"
+
+  case "$install_path" in
+    *"$HOME"*) : ;;
+    *) echo -ne "${col_red}Error: Install path must be in home!${col_end}"; exit 1;;
+  esac
+
   mkdir -p "$install_path" 
+
+  if [ $opt_prefix -eq 0 ]; then
+    __printf "-> Custom Prefix ${opt_prefix_path}"
+  fi 
+  
+
+#       data="$(cat <<-EOF
+# ### bashfx install -  $(date)
+# FX_INSTALL_YES_MODE=${opt_yes}
+# FX_INSTALL_HOME="${install_home}"
+# FX_INSTALL_PREFIX=""
+# ########
+# EOF
+#       )";
+
+
   
   #check we could create it
   if [ -d $install_path ]; then
 
     cd $install_path;
+
+    #get file
     curl -sS -L -o "${install_path}/fx-install.sh" https://git.io/fx-install
     chmod +x "fx-install.sh"
     case ":$install_path:" in
@@ -111,11 +156,10 @@ if [[ $inst_flag != true ]]; then
     esac
 
     fqp=$(which fx-install.sh)
+
     if [ -n "$fqp" -a -x "fx-install.sh" ] ; then
-      alias fxi="fx-install.sh"
-      alias fxicd="cd ${install_path}; ls -la"
-      echo -en "-> ${col_green}Setup complete.${col_x}\n\n"
-      echo -en "-> Run: ${col_blue}fx-install.sh install${col_x}\n"
+      __printf "-> ${col_green}Setup complete.${col_x}"
+      __printf "-> Run: ${col_blue}fx-install.sh install${col_x}"
     else
       echo "Error: fx-install.sh not executable\n"
     fi
@@ -129,5 +173,5 @@ if [[ $inst_flag != true ]]; then
   exit 0
 
 else
-  echo "Install mode not enabled at this time."
+  echo "(Unsafe) Install mode not enabled at this time."
 fi

@@ -62,6 +62,7 @@ opt_clean=1
 opt_prefix=1
 opt_prefix_path=""
 
+[ $# -gt 0 ] && has_args=0 || has_args=1
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -151,7 +152,8 @@ EOF
 # Main
 #-------------------------------------------------------------------------------
 
-if [ $# -gt 0 ]; then 
+if [ $has_args -eq 0 ]; then 
+
   __logo
   __printf "BASHFX v3\n\n"
 

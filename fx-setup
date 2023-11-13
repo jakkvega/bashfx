@@ -84,6 +84,7 @@ while [[ $# -gt 0 ]]; do
     --yes)
       opt_yes=0;
       shift 
+      echo "Saw yes mode"
       ;;
     --debug)
       opt_debug=0;
@@ -113,13 +114,12 @@ done
       ### bashfx install file ###
       # do not edit
       # created: $(date)
-        echo "BASHFX INSTALL CONF IS HERE!"
+        echo "\\n${col_red}BASHFX has a pending install. Run fx-install${col_end}"
         export FX_INSTALLED=1
-        export FX_DEBUG_MODE=${opt_debug}
-        export FX_INSTALL_YES_MODE=${opt_yes}
-        export FX_INSTALL_HOME="${install_home}"
-        export FX_CUSTOM_PREFIX="${opt_prefix_path}"
-        export FX_BIN="$FX_BIN"
+        export FX_DEBUG_MODE=${FX_DEBUG_MODE:-$opt_debug}
+        export FX_INSTALL_YES_MODE=${FX_INSTALL_YES_MODE:-$opt_yes}
+        export FX_INSTALL_HOME="${FX_INSTALL_HOME:-$install_home}"
+        export FX_PREFIX="${FX_PREFIX:-$opt_prefix_path}"
         if [[ ! "\$PATH" =~ "\$FX_INSTALL_HOME\\bin" ]]; then
           export PATH=\$PATH:\$FX_INSTALL_HOME\\bin;
         fi
@@ -131,6 +131,7 @@ EOF
 
   config_make(){
     local src data ret=1
+    __printf "not convicied $FX_INSTALL_YES_MODE $opt_yes"
     #echo -ne "Saving $1 file..."
     src="$1"
     if [ -n $src ]; then
@@ -153,7 +154,18 @@ EOF
   }
 
 
+  __clean(){
+    __printf "-> ${col_blue}oO.0oo. Cleaning 0o.o.0.oo0O. ${col_x}"
+    [ -d "$install_home" ] && rm -rf "$install_home" || :;
+    if grep -q 'source .*/bashfx\-install\.conf' $profile_src; then
+      sed -i.bak '/source .*bashfx-install\.conf/d' "$HOME/.profile"
+    fi
 
+    array=(FX_INSTALLED FX_DEBUG_MODE FX_INSTALL_YES_MODE FX_INSTALL_HOME FX_PREFIX)
+    for var in "${array[@]}"; do
+        unset "$var"
+    done
+  }
 
 #-------------------------------------------------------------------------------
 # Main
@@ -166,94 +178,96 @@ if [ $has_args -eq 0 ]; then
 
   #pre nuke install directory
   if [ $opt_clean -eq 0 ]; then
-    __printf "-> ${col_blue}oO.0oo. Cleaning 0o.o.0.oo0O. ${col_x}"
-    [ -d "$install_home" ] && rm -rf "$install_home" || :;
-    if grep -q 'source .*/bashfx\-install\.conf' $profile_src; then
-      sed -i.bak '/source .*bashfx-install\.conf/d' "$HOME/.profile"
-      
-    fi
+    __clean
+    __printf "-> ${col_red}Exit and restart your terminal for full clean!${col_end}"
+    exit 0
   fi
+
+
 
   #run in safe mode (download script)
   if [ $opt_safe -eq 0 ]; then
 
     __printf "-> Running BASHFX setup in ${col_orange}--safe${col_end} mode."
 
-    # countdown=100
-    # while [ $countdown -gt 0 ]; do
-    #   echo -ne "Continue? $countdown\033[0K\r"
-    #   if read -r -t 1 -n 1; then
-    #     exit 0
-    #   fi
-    #   : $((countdown--))
-    # done
 
-    #setup an obvious install path
+    if [ -f "${install_home}/bashfx-install.conf" ]; then
+      __printf "-> ${col_orange}Setup already run!${col_end}"
+      __printf "To install run: ${col_blue}fx-install.sh install${col_x}"
 
-    case "$install_path" in
-      *"$HOME"*) : ;;
-      *) echo -ne "${col_red}Error: Install path must be in home!${col_end}"; exit 1;;
-    esac
-
-    mkdir -p "$install_path" 
-
-    if [ $opt_prefix -eq 0 ]; then
-      __printf "-> Custom Prefix ${opt_prefix_path}"
     else
-      opt_prefix_path="$HOME/Z_BASHFX"
-      __printf "-> Default Prefix ${col_orange}${opt_prefix_path}${col_end}"
-    fi 
-    
 
-    
-    #check we could create it
-    if [ -d $install_path ]; then
+      # countdown=100
+      # while [ $countdown -gt 0 ]; do
+      #   echo -ne "Continue? $countdown\033[0K\r"
+      #   if read -r -t 1 -n 1; then
+      #     exit 0
+      #   fi
+      #   : $((countdown--))
+      # done
 
-      cd $install_path;
+      #setup an obvious install path
 
-      #get file
-      curl -sS -L -o "${install_path}/fx-install.sh" https://git.io/fx-install
-      chmod +x "fx-install.sh"
-      case ":$install_path:" in
-        *":$PATH:"*) 
-          : 
-        ;;
-        *)  
-          PATH="$PATH:${install_path}"
-        ;;
+      case "$install_path" in
+        *"$HOME"*) : ;;
+        *) __printf "${col_red}Error: Install path must be in home!${col_end}"; exit 1;;
       esac
 
-      fqp=$(which fx-install.sh)
+      mkdir -p "$install_path" 
 
-      if [ -n "$fqp" -a -x "fx-install.sh" ] ; then
-
-        if config_make "${install_home}/bashfx-install.conf"; then
-          __printf "-> ${col_green}Setup complete.${col_x}\n"
-          __printf "To install run: ${col_blue}fx-install.sh install${col_x}"
-
-
-          
-        else
-          __printf "Error."
-        fi
+      if [ $opt_prefix -eq 0 ]; then
+        __printf "-> Custom Prefix ${opt_prefix_path}"
       else
-        echo "Error: fx-install.sh not executable\n"
+        opt_prefix_path="$HOME/Z_BASHFX"
+        __printf "-> Default Prefix ${col_orange}${opt_prefix_path}${col_end}"
+      fi 
+      
+
+      
+      #check we could create it
+      if [ -d $install_path ]; then
+
+        cd $install_path;
+
+        #get file
+        curl -sS -L -o "${install_path}/fx-install.sh" https://git.io/fx-install
+        chmod +x "fx-install.sh"
+        case ":$install_path:" in
+          *":$PATH:"*) 
+            : 
+          ;;
+          *)  
+            PATH="$PATH:${install_path}"
+          ;;
+        esac
+
+        fqp=$(which fx-install.sh)
+
+        if [ -n "$fqp" -a -x "fx-install.sh" ] ; then
+
+          if config_make "${install_home}/bashfx-install.conf"; then
+            __printf "-> ${col_green}BASHFX ready to install.${col_x}\n"
+            __printf "To install run: ${col_blue}fx-install.sh install${col_x}"            
+          else
+            __printf "Error."
+          fi
+        else
+          echo "Error: fx-install.sh not executable\n"
+        fi
+
+
+      else
+        echo "Error: Cant create install directory ($install_path)"
       fi
-
-
-    else
-      echo "Error: Cant create install directory ($install_path)"
+      
     fi
-    
-
-    exit 0
 
 
   fi
 
   if [ $opt_debug -eq 0 ]; then   
-    __printf "-> ${col_blue}Debug.${col_x}\n"
     __printf "\n"
+    __printf "-> ${col_blue}Debug.${col_x}"
     __printf "-> ${col_blue}Config file:${col_x}\n"
     cat "${install_home}/bashfx-install.conf"
     __printf "\n"

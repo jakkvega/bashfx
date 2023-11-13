@@ -295,7 +295,7 @@ EOF #indents with spaces =(
           ${tab} else
           ${tab}   [ -t 1 ] && { echo "\$(tput setaf 214)$script_rc_file is missing, fx link or unlink to fix ${x}";FX_INSTALLED=1; } || :
           ${tab} fi
-        EOF
+EOF #space indent
         )";
         res=$(file_add_block "$data" "$src" "$lbl" )
         ret=$?
@@ -336,7 +336,7 @@ EOF #indents with spaces =(
           export PATH=\$PATH:\$FX_BIN;
         fi
       ${line}
-    EOF
+EOF  #space indent
     )";
     echo "$data"
   }

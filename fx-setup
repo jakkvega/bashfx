@@ -99,8 +99,12 @@ if [[ $inst_flag != true ]]; then
     esac
 
     if [ -n "$(which fx-install.sh)" -a -x "fx-install.sh" ] ; then
+      alias fxi="fx-install.sh"
+      alias fxicd="cd ${install_path}; ls -la"
       echo "PATH has been temporarily updated. Use:"
       echo "> fx-install.sh install"
+      echo "> fxi #run install alias"
+      echo "> fxicd #jump to install dir"
     else
       echo "Error: fx-install.sh not executable"
     fi

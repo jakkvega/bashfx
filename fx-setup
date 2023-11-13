@@ -24,11 +24,12 @@ echo "hello world"
 echo "$0"
 
 
-#curl -s -L https://git.io/fx-setup | bash -s -- --inst --yes --debug
+#curl -s -L https://git.io/fx-setup | bash -s --  --yes --debug
 
 opt_yes=1
 opt_install=1
 opt_debug=1
+opt_clean=1
 opt_prefix=1
 opt_prefix_path=""
 
@@ -36,6 +37,10 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --inst)
       opt_install=0;
+      shift 
+      ;;
+    --clean)
+      opt_clean=0;
       shift 
       ;;
     --yes)
@@ -58,32 +63,54 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+
+
 if [[ $inst_flag != true ]]; then
   echo "Warning: You opted to use BASHFX download only mode."
   echo "If you forgot to run with --inst, you can do so again."
   echo "Otherwise you can run the downloaded file."
 
-  countdown=10
-  while [ $countdown -gt 0 ]; do
-    echo -ne "Continue? $countdown\033[0K\r"
-    if read -r -t 1 -n 1; then
-      exit 0
-    fi
-    : $((countdown--))
-  done
+  # countdown=100
+  # while [ $countdown -gt 0 ]; do
+  #   echo -ne "Continue? $countdown\033[0K\r"
+  #   if read -r -t 1 -n 1; then
+  #     exit 0
+  #   fi
+  #   : $((countdown--))
+  # done
 
-  
+  #setup an obvious install path
   install_path="$HOME/BASHFX_INSTALL/bin"
   mkdir -p "$install_path" 
+  
+  #check we could create it
   if [ -d $install_path ]; then
-    curl -L -o "${install_path}/fx-setup.sh" https://git.io/fx-setup
+
+    cd $install_path;
+    curl -L -o "${install_path}/fx-install.sh" https://git.io/fx-install
+    chmod +x "fx-install.sh"
+    case ":$install_path:" in
+      *":$PATH:"*) 
+        : 
+      ;;
+      *)  
+        PATH="$PATH:${install_path}"
+      ;;
+    esac
+
+    if [ -n "$(which fx-install.sh)" -a -x "fx-install.sh" ] ; then
+      echo "PATH has been temporarily updated. Use:"
+      echo "> fx-install.sh install"
+    else
+      echo "Error: fx-install.sh not executable"
+    fi
+
+
   else
     echo "Error: Cant create install directory ($install_path)"
   fi
   
-  # Optionally, print or do something with the downloaded script here
-  
-  # Exit the script
+
   exit 0
 
 else

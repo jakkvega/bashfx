@@ -428,7 +428,13 @@
 				--custom)
           warn "Using custom prefix path=${next}"
 					opt_custom=0
-					FX_PREFIX="$HOME/.my"
+					FX_PREFIX="$next"
+          if confirm "Is this custom prefix correct ($FX_PREFIX) (y/n=cancel)"; then
+            continue
+          else
+            FX_PREFIX=
+            exit 1
+          fi
 					;;
 				--nuke)
 					opt_nuke=0

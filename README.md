@@ -4,7 +4,7 @@ Bash utility script for managing bash scriptlets.
 
 
 ## 1 Get setup script
-`curl -L https://git.io/fx-setup  | bash -s -- inst --yes --debug`
+`curl -L https://git.io/fx-setup  | bash -s -- inst --yes --debug --custom ~/`
 
 
 ## 2 Generate Opinionated Paths

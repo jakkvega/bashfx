@@ -11,7 +11,7 @@
 #                        \|_________|              |__|/ \|__| 
 #                                                             
 #-------------------------------------------------------------------------------
-#$ name:bashfx-setup
+#$ name:fx-setup
 #$ author:qodeninja
 #$ date:
 #$ semver:
@@ -30,6 +30,7 @@
 #-------------------------------------------------------------------------------
 install_home="$HOME/Z_BASHFX_INSTALL"
 install_path="$install_home/bin"
+profile_src="$HOME/.profile"
 
 #-------------------------------------------------------------------------------
 # Term Colors
@@ -92,8 +93,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-
-
 #-------------------------------------------------------------------------------
 # Config
 #-------------------------------------------------------------------------------
@@ -113,8 +112,8 @@ done
         export FX_INSTALL_HOME="${install_home}"
         export FX_CUSTOM_PREFIX="${opt_prefix_path}"
         export FX_BIN="$FX_BIN"
-        if [[ ! "\$PATH" =~ "\$FX_INSTALL_HOME\bin" ]]; then
-          export PATH=\$PATH:\$FX_INSTALL_HOME\bin;
+        if [[ ! "\$PATH" =~ "\$FX_INSTALL_HOME\\bin" ]]; then
+          export PATH=\$PATH:\$FX_INSTALL_HOME\\bin;
         fi
 EOF
     )";
@@ -129,7 +128,7 @@ EOF
     if [ -n $src ]; then
       data="$(config_file_str)"
       echo -e "$data" > ${src}
-      profile_src="$HOME/.profile"
+
       if [ -f "${src}" ]; then
         if ! grep -q 'source .*/bashfx\-install\.conf' $profile_src; then
           echo "source ${install_home}/bashfx-install.conf" >> $profile_src
@@ -147,93 +146,112 @@ EOF
 
 
 
-# Remove the line if it's present
-# sed -i '/source .*\/myfile\.conf/d' ~/.profile
-
 
 #-------------------------------------------------------------------------------
 # Main
 #-------------------------------------------------------------------------------
 
-
-#pre nuke install directory
-if [ $opt_clean -eq 0 ]; then
-  [ -d "$install_home" ] && rm -rf "$install_home" || :;
-fi
-
-#run in safe mode (download script)
-if [ $opt_safe -eq 0 ]; then
-
+if [ $# -gt 0 ]; then 
   __logo
   __printf "BASHFX v3\n\n"
-  __printf "-> Running BASHFX setup in ${col_orange}--safe${col_end} mode."
 
-  # countdown=100
-  # while [ $countdown -gt 0 ]; do
-  #   echo -ne "Continue? $countdown\033[0K\r"
-  #   if read -r -t 1 -n 1; then
-  #     exit 0
-  #   fi
-  #   : $((countdown--))
-  # done
+  #pre nuke install directory
+  if [ $opt_clean -eq 0 ]; then
+    __printf "-> ${col_blue}oO.0oo. Cleaning 0o.o.0.oo0O. ${col_x}"
+    [ -d "$install_home" ] && rm -rf "$install_home" || :;
+    if grep -q 'source .*/bashfx\-install\.conf' $profile_src; then
+      sed -i.bak '/source .*bashfx-install\.conf/d' "$HOME/.profile"
+      
+    fi
+  fi
 
-  #setup an obvious install path
+  #run in safe mode (download script)
+  if [ $opt_safe -eq 0 ]; then
 
-  case "$install_path" in
-    *"$HOME"*) : ;;
-    *) echo -ne "${col_red}Error: Install path must be in home!${col_end}"; exit 1;;
-  esac
+    __printf "-> Running BASHFX setup in ${col_orange}--safe${col_end} mode."
 
-  mkdir -p "$install_path" 
+    # countdown=100
+    # while [ $countdown -gt 0 ]; do
+    #   echo -ne "Continue? $countdown\033[0K\r"
+    #   if read -r -t 1 -n 1; then
+    #     exit 0
+    #   fi
+    #   : $((countdown--))
+    # done
 
-  if [ $opt_prefix -eq 0 ]; then
-    __printf "-> Custom Prefix ${opt_prefix_path}"
-  else
-    opt_prefix_path="$HOME/Z_BASHFX"
-    __printf "-> Default Prefix ${col_orange}${opt_prefix_path}${col_end}"
-  fi 
-  
+    #setup an obvious install path
 
-  
-  #check we could create it
-  if [ -d $install_path ]; then
-
-    cd $install_path;
-
-    #get file
-    curl -sS -L -o "${install_path}/fx-install.sh" https://git.io/fx-install
-    chmod +x "fx-install.sh"
-    case ":$install_path:" in
-      *":$PATH:"*) 
-        : 
-      ;;
-      *)  
-        PATH="$PATH:${install_path}"
-      ;;
+    case "$install_path" in
+      *"$HOME"*) : ;;
+      *) echo -ne "${col_red}Error: Install path must be in home!${col_end}"; exit 1;;
     esac
 
-    fqp=$(which fx-install.sh)
+    mkdir -p "$install_path" 
 
-    if [ -n "$fqp" -a -x "fx-install.sh" ] ; then
-
-      if config_make "${install_home}/bashfx-install.conf"; then
-        __printf "-> ${col_green}Setup complete.${col_x}"
-        __printf "-> Run: ${col_blue}fx-install.sh install${col_x}"
-      else
-        __printf "Error."
-      fi
+    if [ $opt_prefix -eq 0 ]; then
+      __printf "-> Custom Prefix ${opt_prefix_path}"
     else
-      echo "Error: fx-install.sh not executable\n"
+      opt_prefix_path="$HOME/Z_BASHFX"
+      __printf "-> Default Prefix ${col_orange}${opt_prefix_path}${col_end}"
+    fi 
+    
+
+    
+    #check we could create it
+    if [ -d $install_path ]; then
+
+      cd $install_path;
+
+      #get file
+      curl -sS -L -o "${install_path}/fx-install.sh" https://git.io/fx-install
+      chmod +x "fx-install.sh"
+      case ":$install_path:" in
+        *":$PATH:"*) 
+          : 
+        ;;
+        *)  
+          PATH="$PATH:${install_path}"
+        ;;
+      esac
+
+      fqp=$(which fx-install.sh)
+
+      if [ -n "$fqp" -a -x "fx-install.sh" ] ; then
+
+        if config_make "${install_home}/bashfx-install.conf"; then
+          __printf "-> ${col_green}Setup complete.${col_x}\n"
+          __printf "To install run: ${col_blue}fx-install.sh install${col_x}"
+
+
+          
+        else
+          __printf "Error."
+        fi
+      else
+        echo "Error: fx-install.sh not executable\n"
+      fi
+
+
+    else
+      echo "Error: Cant create install directory ($install_path)"
     fi
+    
+
+    exit 0
 
 
-  else
-    echo "Error: Cant create install directory ($install_path)"
   fi
-  
 
-  exit 0
+  if [ $opt_debug -eq 0 ]; then   
+    __printf "-> ${col_blue}Debug.${col_x}\n"
+    __printf "\n"
+    __printf "-> ${col_blue}Config file:${col_x}\n"
+    cat "${install_home}/bashfx-install.conf"
+    __printf "\n"
+    __printf "-> ${col_blue}Profile:${col_x}\n"
+    cat "$HOME/.profile"
+  fi    
 
 else
-  echo "(Unsafe) Install mode not enabled at this time."
+  __printf "-> ${col_red}Zzz.. Nothing to do${col_x}\n"
 fi

@@ -42,9 +42,12 @@ col_blue="\x1b[38;5;32m"
 col_end="\x1b[1;0m"
 
 __logo(){
-  local logo=$(sed -n '3,12 p' $BASH_SOURCE)
-  printf "\n${col_blue}${logo//#/ }${col_end}\n" 1>&2;
+  if [ -t 0 ]; then
+    local logo=$(sed -n '3,12 p' $BASH_SOURCE)
+    printf "\n${col_blue}${logo//#/ }${col_end}\n" 1>&2;
+  fi
 }
+
 
 __printf(){
   local text=${1:-}; 

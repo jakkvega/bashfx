@@ -27,7 +27,7 @@ echo "$0"
 #curl -s -L https://git.io/fx-setup | bash -s --  --yes --debug
 col_red="\x1b[38;5;9m"
 col_green="\x1b[38;5;34m"
-col_orange="\x1b[38;5;212m"
+col_orange="\x1b[38;5;215m"
 col_blue="\x1b[38;5;32m"
 col_end="\x1b[1;0m"
 
@@ -71,9 +71,9 @@ done
 
 
 if [[ $inst_flag != true ]]; then
-  echo -en "{$col_orange}Warning: You opted to use BASHFX download only mode."
-  echo "If you forgot to run with --inst, you can do so again."
-  echo -en "Otherwise you can run the downloaded file.${col_end}"
+  echo -en "${col_orange}Warning: You opted to use BASHFX download only mode.\n"
+  echo -en "If you forgot to run with --inst, you can do so again.\n"
+  echo -en "Otherwise you can run the downloaded file.${col_end}\n"
 
   # countdown=100
   # while [ $countdown -gt 0 ]; do
@@ -92,7 +92,7 @@ if [[ $inst_flag != true ]]; then
   if [ -d $install_path ]; then
 
     cd $install_path;
-    curl -L -o "${install_path}/fx-install.sh" https://git.io/fx-install
+    curl -S -L -o "${install_path}/fx-install.sh" https://git.io/fx-install
     chmod +x "fx-install.sh"
     case ":$install_path:" in
       *":$PATH:"*) 
@@ -106,12 +106,12 @@ if [[ $inst_flag != true ]]; then
     if [ -n "$(which fx-install.sh)" -a -x "fx-install.sh" ] ; then
       alias fxi="fx-install.sh"
       alias fxicd="cd ${install_path}; ls -la"
-      echo "PATH has been temporarily updated. Use:"
-      echo -en "> ${col_orange}fx-install.sh install${col_x}"
-      echo -en "> ${col_orange}fxi${col_x} #run install alias"
-      echo -en "> ${col_orange}fxicd${col_x} #jump to install dir"
+      echo "PATH has been temporarily updated. Use:\n"
+      echo -en "> ${col_orange}fx-install.sh install${col_x}\n"
+      echo -en "> ${col_orange}fxi${col_x} #run install alias\n"
+      echo -en "> ${col_orange}fxicd${col_x} #jump to install dir\n"
     else
-      echo "Error: fx-install.sh not executable"
+      echo "Error: fx-install.sh not executable\n"
     fi
 
 

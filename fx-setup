@@ -15,7 +15,7 @@
 #$ author:qodeninja
 #$ date:
 #$ semver:
-#$ autobuild: 00005
+#$ autobuild: 00007
 #-------------------------------------------------------------------------------
 #=====================================code!=====================================
 
@@ -62,7 +62,14 @@ opt_clean=1
 opt_prefix=1
 opt_prefix_path=""
 
-[ $# -gt 0 ] && has_args=0 || has_args=1
+if [ $# -gt 0 ]; then
+ has_args=0 
+ echo 'has args'
+ else 
+ has_args=1
+ echo 'no args'
+fi
+
 
 while [[ $# -gt 0 ]]; do
   case $1 in
